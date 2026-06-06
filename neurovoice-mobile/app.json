@@ -1,0 +1,54 @@
+{
+  "expo": {
+    "name": "NeuroVoice",
+    "slug": "neurovoice-mobile",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "scheme": "neurovoice",
+    "userInterfaceStyle": "light",
+    "main": "expo-router/entry",
+    "plugins": [
+      "expo-router",
+      "expo-av",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "NeuroVoice needs camera access to analyse facial movement and symmetry during the face test."
+        }
+      ]
+    ],
+    "ios": {
+      "bundleIdentifier": "com.neurovoice.mobile",
+      "supportsTablet": false,
+      "infoPlist": {
+        "NSMicrophoneUsageDescription": "NeuroVoice needs microphone access to record your voice for neurological assessment.",
+        "NSCameraUsageDescription": "NeuroVoice needs camera access to analyse facial movement and symmetry during the face test.",
+        "NSPhotoLibraryUsageDescription": "NeuroVoice may save audio recordings to your media library for analysis.",
+        "NSPhotoLibraryAddUsageDescription": "NeuroVoice needs permission to save audio recordings.",
+        "NSAppTransportSecurity": {
+          "NSAllowsArbitraryLoads": true
+        }
+      }
+    },
+    "android": {
+      "package": "com.neurovoice.mobile",
+      "permissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.CAMERA",
+        "android.permission.READ_MEDIA_AUDIO",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.INTERNET",
+        "android.permission.ACCESS_NETWORK_STATE"
+      ]
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "static"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "neurovoice-mobile"
+      }
+    }
+  }
+}
