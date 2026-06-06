@@ -1,0 +1,1 @@
+["jitter_local", "jitter_local_abs", "jitter_rap", "jitter_ppq5", "jitter_ddp", "shimmer_local", "shimmer_local_db", "shimmer_apq3", "shimmer_apq5", "shimmer_apq11", "shimmer_dda", "pitch_median", "pitch_mean", "pitch_std", "pitch_min", "pitch_max", "pulses", "periods", "mean_period", "period_std", "frac_unvoiced", "voice_breaks", "degree_voice_breaks"]
