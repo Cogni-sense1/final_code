@@ -17,7 +17,24 @@ This file records ambiguous calls made during autonomous work so a human can rev
 - Per-modality internal scoring thresholds (face percentage bands in `riskCalculation.ts`, finger-tap CV cutoffs, drawing-test `0.35/0.65`) were **left unchanged** — they are separate rule-based scoring systems, not the "same number" (the overall/voice risk probability) Task 1 targets.
 
 ## Task 3 — Dependency audit
-- (filled in during Task 3)
+- **Removed `@google/genai`**: it appeared only in `package.json` and was never imported anywhere in the codebase. Removed via `npm uninstall @google/genai` (updates `package.json` and `package-lock.json` together; 36 transitive packages pruned).
+  - Note: `package-lock.json` is **git-ignored** in this repo (see `.gitignore`), so the lockfile change is local only and cannot be committed. The `package.json` change is committed.
+
+### Other dependencies that APPEAR unused (NOT removed — for human review)
+Detected with `npx depcheck` and confirmed by grep. Left in place per task instructions.
+
+| Package | Type | Notes |
+|---|---|---|
+| `zod` | dependency | No `import ... from "zod"` anywhere in `src/`. Likely intended for form validation that was never wired up. |
+| `@hookform/resolvers` | dependency | Not imported; `src/components/ui/form.tsx` uses `react-hook-form` directly but never the zod resolver. |
+| `fast-check` | dependency | Not imported in web `src/`. Used by the **mobile** app's tests (separate package). Also mis-placed: it's a test-only lib but sits in `dependencies`. |
+| `@tailwindcss/typography` | devDependency | Not referenced in `tailwind.config.ts` (only `tailwindcss-animate` is registered as a plugin). |
+| `@testing-library/react` | devDependency | Not imported by any web test (`src/test/` only has a trivial example). A reasonable dep to keep for future component tests. |
+
+**depcheck false positives (do NOT remove — verified in use):**
+- `autoprefixer`, `postcss` — used by `postcss.config.js` for the Tailwind build pipeline.
+
+**Broader observation:** most `@radix-ui/*` packages are only consumed by scaffolded shadcn UI components in `src/components/ui/` that no page imports (pages use only button, progress, slider, switch, sonner, tooltip). Pruning the unused UI components would let many radix deps be removed, but that is a larger refactor and is left for human review.
 
 ## Other notes
 - (filled in as needed)
