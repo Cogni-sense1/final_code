@@ -3,6 +3,7 @@ import { Calendar, Mic, Smile, FileText, Sparkles } from "lucide-react";
 import BottomNav from "@/components/BottomNav";
 import { useState, useEffect } from "react";
 import { getRecentTests, getDailyAggregatedData, getAverageRisk, formatTimestamp } from "@/utils/testHistory";
+import { getRiskLevel } from "@/constants/risk";
 
 const Insights = () => {
   const navigate = useNavigate();
@@ -61,9 +62,9 @@ const Insights = () => {
     pathD += ` Q ${cpX2} ${cpY2}, ${points[i + 1].x} ${points[i + 1].y}`;
   }
 
-  // Calculate average risk percentage and level
+  // Calculate average risk percentage and level (unified thresholds — see src/constants/risk.ts)
   const avgRiskPercent = Math.round(avgRisk * 100);
-  const avgRiskLevel = avgRiskPercent < 33 ? 'Low' : avgRiskPercent < 66 ? 'Medium' : 'High';
+  const avgRiskLevel = getRiskLevel(avgRisk);
   const avgRiskColor = avgRiskLevel === 'Low' ? '#5DBEA3' : avgRiskLevel === 'Medium' ? '#FF9F43' : '#FF6B6B';
   const avgRiskBg = avgRiskLevel === 'Low' ? '#D4F1E8' : avgRiskLevel === 'Medium' ? '#FFE8D6' : '#FFE0E0';
 

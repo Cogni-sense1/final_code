@@ -31,7 +31,22 @@ except Exception as e:
 # -------------------------------
 # CONFIG
 # -------------------------------
+# Unified risk thresholds (single scheme shared with the web/mobile apps,
+# see src/constants/risk.ts). One 0-1 probability drives BOTH the binary
+# screening decision and the Low/Medium/High label:
+#
+#   Low     : prob  <  0.30
+#   Medium  : 0.30 <= prob <= 0.66
+#   High    : prob  >   0.66
+#
+# 0.30 is a deliberate sensitivity-first clinical choice: the v4 model
+# threshold was tuned for >=0.95 recall on Parkinson's, so the tool errs
+# toward catching possible cases rather than missing them. Previously the
+# label boundary was 0.33 while screening used 0.30, so a 0.31 score was
+# flagged "at risk" yet displayed as "Low"; the label boundary is now 0.30
+# to match the screening cutoff.
 SCREENING_THRESHOLD = 0.30
+MEDIUM_HIGH_THRESHOLD = 0.66
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 MODEL_DIR = os.path.join(BASE_DIR, "model")
@@ -84,8 +99,8 @@ def predict(audio_path, meta=DEFAULT_META):
     return {
         "risk_score": round(float(prob), 3),
         "risk_level": (
-            "Low" if prob < 0.33 else
-            "Medium" if prob < 0.66 else
+            "Low" if prob < SCREENING_THRESHOLD else
+            "Medium" if prob <= MEDIUM_HIGH_THRESHOLD else
             "High"
         )
     }

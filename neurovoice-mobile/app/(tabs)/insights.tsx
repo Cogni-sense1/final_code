@@ -24,6 +24,7 @@ import {
   type TestRecord,
   type DailyData,
 } from '../../utils/storage';
+import { getRiskLevel as getRiskLevelFromScore } from '../../constants/risk';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -40,10 +41,10 @@ function getRiskBadge(level: string): { bg: string; text: string } {
   }
 }
 
+// Unified thresholds — see neurovoice-mobile/constants/risk.ts.
+// Accepts a 0–100 percentage and delegates to the shared 0–1 scheme.
 function getRiskLevel(pct: number): 'Low' | 'Medium' | 'High' {
-  if (pct < 33) return 'Low';
-  if (pct < 66) return 'Medium';
-  return 'High';
+  return getRiskLevelFromScore(pct / 100);
 }
 
 // ─── SVG Line Chart (smooth bezier, matches web) ──────────────────────────────

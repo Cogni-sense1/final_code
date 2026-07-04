@@ -23,6 +23,7 @@ import {
   type TestRecord,
   type DailyData,
 } from '../utils/storage';
+import { getRiskLevel } from '../constants/risk';
 
 // ─── Bar chart (matches web exactly) ─────────────────────────────────────────
 
@@ -110,11 +111,13 @@ export default function CaregiverDashboard() {
 
   useFocusEffect(useCallback(() => { loadData(); }, [loadData]));
 
+  // Unified thresholds — see neurovoice-mobile/constants/risk.ts
   const avgRiskPct = Math.round(avgRisk * 100);
-  const riskLabel = avgRiskPct < 33 ? 'Low Risk' : avgRiskPct < 66 ? 'Medium Risk' : 'High Risk';
-  const riskColor = avgRiskPct < 33 ? '#5DBEA3' : avgRiskPct < 66 ? '#FF9F43' : '#FF6B6B';
-  const riskBg = avgRiskPct < 33 ? '#D4F1E8' : avgRiskPct < 66 ? '#FFE8D6' : '#FFE0E0';
-  const riskBorder = avgRiskPct < 33 ? '#B8EDD8' : avgRiskPct < 66 ? '#FFD4A0' : '#FFCCCC';
+  const avgRiskLevel = getRiskLevel(avgRisk);
+  const riskLabel = `${avgRiskLevel} Risk`;
+  const riskColor = avgRiskLevel === 'Low' ? '#5DBEA3' : avgRiskLevel === 'Medium' ? '#FF9F43' : '#FF6B6B';
+  const riskBg = avgRiskLevel === 'Low' ? '#D4F1E8' : avgRiskLevel === 'Medium' ? '#FFE8D6' : '#FFE0E0';
+  const riskBorder = avgRiskLevel === 'Low' ? '#B8EDD8' : avgRiskLevel === 'Medium' ? '#FFD4A0' : '#FFCCCC';
 
   const latestVoice = recentTests.find((t) => t.type === 'VOICE');
   const latestFace = recentTests.find((t) => t.type === 'FACE');
