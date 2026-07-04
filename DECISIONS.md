@@ -36,5 +36,19 @@ Detected with `npx depcheck` and confirmed by grep. Left in place per task instr
 
 **Broader observation:** most `@radix-ui/*` packages are only consumed by scaffolded shadcn UI components in `src/components/ui/` that no page imports (pages use only button, progress, slider, switch, sonner, tooltip). Pruning the unused UI components would let many radix deps be removed, but that is a larger refactor and is left for human review.
 
+## Task 4 — Multimodal fusion
+- `calculateOverallRisk(tests)` lives in `src/utils/overallRisk.ts` and accepts an array of already-window-filtered test records (`{ type, riskScore }`). Date-range filtering stays the caller's job (via `getTestsForDays`), keeping the fusion function pure and trivially unit-testable.
+- **"Effective contribution percentage"** in `breakdown` was interpreted as the renormalized *weight* expressed as a percentage (e.g. voice 50%, face 30%, finger-tap 20%). This matches the Task 5 UI example ("Voice contributed 50%, Face 30%, Finger-tap 20%"), which shows weights, not score-share. `weight` (0–1) and `contribution` (0–100) are therefore the same quantity in different units.
+- The old flat-average `getAverageRisk()` in `testHistory.ts` was left in place (still exported) to avoid breaking any other consumer; Insights now uses the fusion instead.
+
+## Task 5 — Fusion breakdown UI
+- Wired into `src/pages/Insights.tsx`: the "AVERAGE RISK (7D)" headline is now the fused "OVERALL RISK (7D)", and a new "Risk Breakdown" card shows each contributing modality's test count, average, contribution %, and a colored bar. Styling reuses the existing shadcn/Tailwind card idiom; no new dependencies.
+- The breakdown card only renders modalities that actually have tests in the window.
+
 ## Other notes
-- (filled in as needed)
+- **Mobile test suite has 2 pre-existing failures unrelated to this work.** `neurovoice-mobile` deps had to be installed with `--legacy-peer-deps` (repo pins `react@19.1.0` but `react-test-renderer@19.2.7` demands `react@^19.2.7` — a pre-existing peer conflict). After install, `jest`:
+  - `__tests__/voice-test.test.tsx` and `utils/permissions.test.ts` fail because they import Expo native modules that error under `jest-expo` in this environment (`expo-modules-core` `Platform.select` is undefined). The voice-test counterexample `[0,"Low"]` fails on the first run because the component `require` throws, not due to assertion logic.
+  - The pure-logic suites pass: `storage.test.ts`, `riskCalculation.test.ts`, `voiceAnalysisAPI.test.ts` (14 tests).
+  - None of the failing suites import the files I changed (`caregiver.tsx`, `(tabs)/insights.tsx`, `constants/risk.ts`), so these failures are not caused by this work and were left as-is (fixing jest-expo native-module mocking is out of scope and risky).
+- **Committed venv noise:** `backend/python/not/` contains a checked-in Python 3.9 virtualenv. It looks like an accidental commit and inflates the repo, but deleting files beyond the unused-dependency removal is outside this task's scope, so it was left for human review.
+- `package-lock.json` (web) and the mobile lockfile are git-ignored, so dependency-tree changes (the `@google/genai` removal, mobile install) are local only.
