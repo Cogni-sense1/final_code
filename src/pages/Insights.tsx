@@ -1,22 +1,32 @@
 import { useNavigate } from "react-router-dom";
-import { Calendar, Mic, Smile, FileText, Sparkles } from "lucide-react";
+import { Calendar, Mic, Smile, Hand, Sparkles } from "lucide-react";
 import BottomNav from "@/components/BottomNav";
 import { useState, useEffect } from "react";
-import { getRecentTests, getDailyAggregatedData, getAverageRisk, formatTimestamp } from "@/utils/testHistory";
-import { getRiskLevel } from "@/constants/risk";
+import { getRecentTests, getDailyAggregatedData, getTestsForDays, formatTimestamp } from "@/utils/testHistory";
+import { calculateOverallRisk, type OverallRisk } from "@/utils/overallRisk";
+import type { Modality } from "@/constants/risk";
+
+// Presentation metadata for each fusion modality (label, icon, colors).
+const MODALITY_META: Record<Modality, { label: string; icon: typeof Mic; color: string; bg: string }> = {
+  voice: { label: "Voice", icon: Mic, color: "#FF8C42", bg: "#FFE8D6" },
+  face: { label: "Face", icon: Smile, color: "#7B68EE", bg: "#E8E4FF" },
+  fingerTap: { label: "Finger-tap", icon: Hand, color: "#5DBEA3", bg: "#D4F1E8" },
+};
 
 const Insights = () => {
   const navigate = useNavigate();
   const [recentTests, setRecentTests] = useState(getRecentTests(3));
   const [chartData, setChartData] = useState(getDailyAggregatedData(7));
-  const [avgRisk, setAvgRisk] = useState(getAverageRisk(7));
+  const [overallRisk, setOverallRisk] = useState<OverallRisk>(() =>
+    calculateOverallRisk(getTestsForDays(7))
+  );
 
   // Refresh data periodically
   useEffect(() => {
     const loadData = () => {
       setRecentTests(getRecentTests(3));
       setChartData(getDailyAggregatedData(7));
-      setAvgRisk(getAverageRisk(7));
+      setOverallRisk(calculateOverallRisk(getTestsForDays(7)));
     };
 
     loadData();
@@ -62,11 +72,18 @@ const Insights = () => {
     pathD += ` Q ${cpX2} ${cpY2}, ${points[i + 1].x} ${points[i + 1].y}`;
   }
 
-  // Calculate average risk percentage and level (unified thresholds — see src/constants/risk.ts)
-  const avgRiskPercent = Math.round(avgRisk * 100);
-  const avgRiskLevel = getRiskLevel(avgRisk);
+  // Fused overall risk over the 7-day window (multimodal fusion — see
+  // src/utils/overallRisk.ts). Replaces the old flat average, which was biased
+  // by whichever modality was tested most often.
+  const avgRiskPercent = Math.round(overallRisk.overallScore * 100);
+  const avgRiskLevel = overallRisk.riskLevel;
   const avgRiskColor = avgRiskLevel === 'Low' ? '#5DBEA3' : avgRiskLevel === 'Medium' ? '#FF9F43' : '#FF6B6B';
   const avgRiskBg = avgRiskLevel === 'Low' ? '#D4F1E8' : avgRiskLevel === 'Medium' ? '#FFE8D6' : '#FFE0E0';
+
+  // Modalities that actually contributed to the fused score, for the breakdown UI.
+  const contributingModalities = (Object.keys(MODALITY_META) as Modality[]).filter(
+    (m) => overallRisk.breakdown[m].count > 0
+  );
 
   // Calculate trend (compare last 3 days vs previous 4 days)
   const recentAvg = chartData.slice(-3).reduce((sum, d) => sum + d.avgRisk, 0) / 3;
@@ -94,7 +111,7 @@ const Insights = () => {
           {/* Average Risk Display */}
           <div className="flex items-start justify-between mb-6">
             <div>
-              <p className="text-xs text-[#B8B8B8] uppercase tracking-wider mb-1">AVERAGE RISK (7D)</p>
+              <p className="text-xs text-[#B8B8B8] uppercase tracking-wider mb-1">OVERALL RISK (7D)</p>
               <div className="flex items-baseline gap-2">
                 <span className="text-5xl font-bold text-[#1A1A1A]">{avgRiskPercent}%</span>
                 <span 
@@ -176,6 +193,58 @@ const Insights = () => {
             </div>
           )}
         </div>
+
+        {/* Risk Breakdown Card — how each modality fed into the overall score */}
+        {contributingModalities.length > 0 && (
+          <div className="bg-white rounded-3xl p-6 mb-6 shadow-sm animate-fade-in" style={{ animationDelay: "0.05s" }}>
+            <h2 className="text-xl font-bold text-[#1A1A1A] mb-1">Risk Breakdown</h2>
+            <p className="text-sm text-[#6B6B6B] mb-5">
+              How each test type contributed to your overall score
+            </p>
+
+            <div className="flex flex-col gap-4">
+              {contributingModalities.map((m) => {
+                const meta = MODALITY_META[m];
+                const detail = overallRisk.breakdown[m];
+                const Icon = meta.icon;
+                const avgPercent = Math.round((detail.average ?? 0) * 100);
+                return (
+                  <div key={m}>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <div className="flex items-center gap-2">
+                        <div
+                          className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0"
+                          style={{ backgroundColor: meta.bg }}
+                        >
+                          <Icon size={15} style={{ color: meta.color }} strokeWidth={2.5} />
+                        </div>
+                        <span className="text-sm font-bold text-[#1A1A1A]">{meta.label}</span>
+                        <span className="text-xs text-[#999999]">
+                          {detail.count} {detail.count === 1 ? 'test' : 'tests'} · avg {avgPercent}%
+                        </span>
+                      </div>
+                      <span className="text-sm font-bold" style={{ color: meta.color }}>
+                        {detail.contribution}%
+                      </span>
+                    </div>
+                    {/* Contribution bar */}
+                    <div className="h-2 w-full rounded-full bg-[#F0EDE8] overflow-hidden">
+                      <div
+                        className="h-full rounded-full transition-all"
+                        style={{ width: `${detail.contribution}%`, backgroundColor: meta.color }}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <p className="text-xs text-[#999999] mt-5 leading-relaxed">
+              Voice is weighted highest (model-backed); face and finger-tap are rule-based and weighted lower.
+              Weights renormalize across whichever tests you've taken.
+            </p>
+          </div>
+        )}
 
         {/* Recent Tests */}
         <div className="mb-6 animate-fade-in" style={{ animationDelay: "0.1s" }}>
