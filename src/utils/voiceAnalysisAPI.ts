@@ -12,7 +12,9 @@ export interface VoiceAnalysisResult {
   risk_level: 'Low' | 'Medium' | 'High';
 }
 
-const BACKEND_URL = 'http://localhost:5050';
+// Backend base URL. Configurable via the VITE_API_BASE_URL env var
+// (see .env.example); falls back to localhost for local development.
+const BACKEND_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:5050';
 
 export const analyzeVoice = async (
   audioBlob: Blob,
