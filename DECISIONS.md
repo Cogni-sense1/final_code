@@ -88,3 +88,9 @@ Branched from `kiro/phase0-phase1-fusion`.
 - The script only calls `joblib.load` on the model (never dumps/retrains); training code and artifacts untouched.
 - One caveat worth human note: the dataset has only **40 subjects** (8 in the hold-out), so the strong numbers (ROC-AUC 0.984) rest on a small subject count — reasonable to report but not over-interpret.
 - Minor: replaced a non-ASCII arrow in console output with ASCII to avoid a Windows cp1252 `UnicodeEncodeError` (the markdown file is written UTF-8 regardless).
+
+## Task 3 — Containerization prep
+- Added `backend/Dockerfile` (single container: Node server + Python 3 inference + ffmpeg + model files) and `backend/.dockerignore`.
+- **Docker was NOT available in this environment** (`docker` command not found), so the image was authored but **not built or run**. The build is therefore **unverified**. A note to this effect is in the Dockerfile header.
+- Build context is `backend/` so the image can copy both `node/` and `python/` (including `python/model/*.joblib`). Recommended commands are in the Dockerfile header.
+- Design choices: `node:20-bookworm-slim` base; installs `python3`/`ffmpeg`/`libsndfile1` (for librosa/soundfile) and `build-essential`+`python3-dev` (for `better-sqlite3` native build and any py wheels lacking prebuilts); `pip install --break-system-packages` because bookworm's system Python is PEP-668 externally-managed and the container is single-purpose; SQLite path via `RESULTS_DB_PATH` env pointing at `/app/node/data` (mount a volume to persist). No images pushed, no cloud services touched.
