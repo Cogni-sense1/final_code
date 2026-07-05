@@ -67,3 +67,24 @@ Branched from `kiro/phase0-phase1-fusion`. Never committed to `main`.
 - **Web `testHistory.ts` fallback behavior (documented in-file):** localStorage stays the synchronous source of truth so the existing synchronous page code is unchanged and the app runs fully offline. Writes are write-through (local first, then best-effort POST). `hydrateFromBackend()` runs once on app start (in `App.tsx`) and refreshes the local cache from the server when reachable; if the backend is down it silently keeps the local cache. This preserved the sync API and avoided a risky async refactor across every page.
 - **SQLite file location:** `backend/node/data/results.db` (overridable via `RESULTS_DB_PATH`). Git-ignored (added to `backend/.gitignore`), documented in `.env.example`.
 - **Rounding note:** contribution percentages use float weights, so e.g. `0.3/0.8 → 37%` (not 38) — a test asserts the actual value. Contributions can differ from a naive expectation by 1 due to float rounding but still sum sensibly.
+
+---
+
+# Phase 2 — kiro/phase2-prep-and-model-rigor (2026-07-05)
+
+Branched from `kiro/phase0-phase1-fusion`.
+
+## Task 1 — Backend persistence (verified)
+- Implemented in a prior session; verified this session: all 12 backend tests pass (`node --test` in `backend/node`).
+- Repository pattern: `ResultsRepository` (contract + validation) with `SqliteResultsRepository` (better-sqlite3) as the local impl; endpoints in `resultsRoutes.js` depend only on the contract, so a `DynamoResultsRepository` can be dropped in later without touching routes. No AWS SDK installed.
+- Endpoints mounted at `/api`: `POST /api/results`, `GET /api/results` (filter by modality/from/to/userId), `GET /api/overall-risk` (fusion, honors `days` window). `userId` ("local-user") on every record.
+- Web `testHistory.ts`: localStorage stays the synchronous source of truth; writes are write-through (local first, then best-effort POST); `hydrateFromBackend()` (called once in `App.tsx`) refreshes the cache from the server on startup and silently falls back to localStorage if the backend is unreachable (offline/demo mode).
+- SQLite `data/` + `*.db*` git-ignored in `backend/.gitignore`.
+
+## Task 2 — Model rigor analysis
+- Training data **is present** (`backend/python/full_with_headers.csv`, 1208 recordings / 40 subjects), so the task was executed (not skipped).
+- New read-only script `backend/python/evaluate_model_v4.py` + results in `model_evaluation.md` (dated, labeled with dataset + model version).
+- **CV-scheme interpretation:** the training script uses a single patient-grouped `GroupShuffleSplit(test_size=0.2, random_state=42)` hold-out (plus an internal `CalibratedClassifierCV(cv=5)` for calibration), not an outer k-fold. The deployed model is a single fixed artifact, so it cannot be k-fold cross-validated without retraining (forbidden). I therefore evaluated the deployed model on the **exact same patient-grouped hold-out test set** (same seed) it was never trained on — the faithful read-only equivalent. Verified 0 subject overlap between train/test.
+- The script only calls `joblib.load` on the model (never dumps/retrains); training code and artifacts untouched.
+- One caveat worth human note: the dataset has only **40 subjects** (8 in the hold-out), so the strong numbers (ROC-AUC 0.984) rest on a small subject count — reasonable to report but not over-interpret.
+- Minor: replaced a non-ASCII arrow in console output with ASCII to avoid a Windows cp1252 `UnicodeEncodeError` (the markdown file is written UTF-8 regardless).
