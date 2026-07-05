@@ -36,14 +36,24 @@ SCREENING_THRESHOLD = 0.30
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 MODEL_DIR = os.path.join(BASE_DIR, "model")
 
-# Load v4-lite model
-model = joblib.load(
-    os.path.join(MODEL_DIR, "logreg_model_v4.joblib")
-)
+# Prefer the honest, leak-free acoustic model (voice_model.joblib). The old v4
+# model reported AUC ~0.99 only because `updrs` leaked the label; it does not
+# generalise to real screening. Fall back to v4 only if the honest model is
+# missing. See train_voice_model.py for details.
+VOICE_MODEL_PATH = os.path.join(MODEL_DIR, "voice_model.joblib")
+VOICE_FEATURES_PATH = os.path.join(MODEL_DIR, "voice_features.json")
 
-# Load v4-lite feature list (IMPORTANT)
-with open(os.path.join(MODEL_DIR, "feature_cols_v4_calibrated.json")) as f:
-    feature_cols = json.load(f)
+if os.path.exists(VOICE_MODEL_PATH) and os.path.exists(VOICE_FEATURES_PATH):
+    model = joblib.load(VOICE_MODEL_PATH)
+    with open(VOICE_FEATURES_PATH) as f:
+        feature_cols = json.load(f)
+    USES_METADATA = any(c in feature_cols for c in ("ac", "nth", "htn", "updrs"))
+else:
+    # Legacy fallback (leak-prone) — kept only for backward compatibility.
+    model = joblib.load(os.path.join(MODEL_DIR, "logreg_model_v4.joblib"))
+    with open(os.path.join(MODEL_DIR, "feature_cols_v4_calibrated.json")) as f:
+        feature_cols = json.load(f)
+    USES_METADATA = True
 
 # -------------------------------
 # DEFAULT METADATA (for CLI demo)
@@ -63,13 +73,16 @@ def predict(audio_path, meta=DEFAULT_META):
     # Extract audio features (Praat)
     praat_feats = extract_praat_features(audio_path)
 
-    # Merge clinical metadata
-    praat_feats.update({
-        "ac": meta["ac"],
-        "nth": meta["nth"],
-        "htn": meta["htn"],
-        "updrs": meta["updrs"]
-    })
+    # Only merge clinical metadata if the loaded model was trained with it.
+    # The honest acoustic model ignores metadata (and never uses `updrs`,
+    # which would leak the label and cannot be known at screening time).
+    if USES_METADATA:
+        praat_feats.update({
+            "ac": meta["ac"],
+            "nth": meta["nth"],
+            "htn": meta["htn"],
+            "updrs": meta["updrs"],
+        })
 
     # Align features exactly as training
     X = build_feature_vector(praat_feats, feature_cols)

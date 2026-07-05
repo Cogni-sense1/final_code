@@ -7,9 +7,7 @@ import {
   View, Text, StyleSheet, TouchableOpacity,
   ScrollView, SafeAreaView, PanResponder,
 } from 'react-native';
-import Svg, {
-  Path, Circle, Line, Ellipse, Text as SvgText, G,
-} from 'react-native-svg';
+import Svg, { Path, Circle } from 'react-native-svg';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { ProgressBar } from '../components/ProgressBar';
@@ -18,7 +16,7 @@ import { addTestRecord } from '../utils/storage';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type Task = 'Archimedes Spiral' | 'Meander Wave' | 'Clock Drawing';
+type Task = 'Archimedes Spiral' | 'Meander Wave';
 type Phase = 'setup' | 'drawing' | 'processing' | 'result';
 
 /** Raw touch sample including pressure if available */
@@ -78,13 +76,6 @@ const TASKS: {
     color: '#5DBEA3', bg: '#C8E6DD',
     shortDesc: 'Trace the sinusoidal wave path',
     instruction: 'Trace the dashed wave from left to right as smoothly as you can, staying as close to the guide line as possible.',
-  },
-  {
-    id: 'Clock Drawing',
-    icon: 'time-outline',
-    color: '#7B68EE', bg: '#E8E4FF',
-    shortDesc: 'Draw clock hands showing 10:10',
-    instruction: 'Inside the clock circle, draw the hour hand pointing to 10 and the minute hand pointing to 2 (showing 10:10). Start each hand from the centre dot.',
   },
 ];
 
@@ -571,46 +562,6 @@ export default function DrawingTest() {
                 </>
               )}
 
-              {selectedTask === 'Clock Drawing' && (
-                <>
-                  <Circle
-                    cx={CC} cy={CC} r={CC - 16}
-                    stroke="#D8D0C8" strokeWidth={2} fill="none"
-                  />
-                  <Circle cx={CC} cy={CC} r={5} fill="#7B68EE" opacity={0.6} />
-                  {/* Hour markers */}
-                  {[...Array(12)].map((_, i) => {
-                    const angle = (i * 30 - 90) * (Math.PI / 180);
-                    const r1 = CC - 18;
-                    const r2 = CC - 28;
-                    return (
-                      <Line
-                        key={i}
-                        x1={CC + r1 * Math.cos(angle)} y1={CC + r1 * Math.sin(angle)}
-                        x2={CC + r2 * Math.cos(angle)} y2={CC + r2 * Math.sin(angle)}
-                        stroke="#D8D0C8" strokeWidth={i % 3 === 0 ? 2.5 : 1}
-                      />
-                    );
-                  })}
-                  {/* 12/3/6/9 numbers */}
-                  {[12, 3, 6, 9].map((n, i) => {
-                    const angle = (i * 90 - 90) * (Math.PI / 180);
-                    const r = CC - 44;
-                    return (
-                      <SvgText
-                        key={n}
-                        x={CC + r * Math.cos(angle)}
-                        y={CC + r * Math.sin(angle) + 5}
-                        textAnchor="middle" fontSize={15} fill="#CCCCCC" fontWeight="600"
-                      >
-                        {n}
-                      </SvgText>
-                    );
-                  })}
-                  <Text style={s.clockInstruction}>Draw hands for 10:10</Text>
-                </>
-              )}
-
               {/* User strokes */}
               {displayPath ? (
                 <Path
@@ -904,9 +855,6 @@ const s = StyleSheet.create({
     alignSelf: 'center',
     shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 8, elevation: 3,
   },
-  clockInstruction: {
-    // Fallback for clock task note — SVG Text handles it
-  } as any,
   drawingActions: { flexDirection: 'row', gap: 12, marginTop: 16, alignItems: 'center' },
   clearBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 6,

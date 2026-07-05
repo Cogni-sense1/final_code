@@ -17,13 +17,26 @@ const BottomNav = () => {
             key={to}
             to={to}
             className={({ isActive }) =>
-              `flex flex-col items-center gap-1.5 px-3 py-1 transition-colors ${
-                isActive ? "text-[#FF8C42]" : "text-[#B8B8B8]"
+              `relative flex flex-col items-center gap-1.5 px-3 py-1 transition-colors duration-200 active:scale-90 ${
+                isActive ? "text-[#FF8C42]" : "text-[#B8B8B8] hover:text-[#8A8A8A]"
               }`
             }
           >
-            <Icon size={24} strokeWidth={2} />
-            <span className="text-[10px] font-semibold tracking-wider">{label}</span>
+            {({ isActive }) => (
+              <>
+                <span
+                  className={`absolute -top-3 h-1 rounded-full bg-[#FF8C42] transition-all duration-300 ${
+                    isActive ? "w-6 opacity-100" : "w-0 opacity-0"
+                  }`}
+                />
+                <Icon
+                  size={24}
+                  strokeWidth={isActive ? 2.5 : 2}
+                  className={`transition-transform duration-200 ${isActive ? "scale-110" : "scale-100"}`}
+                />
+                <span className="text-[10px] font-semibold tracking-wider">{label}</span>
+              </>
+            )}
           </NavLink>
         ))}
       </div>

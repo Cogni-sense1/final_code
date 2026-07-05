@@ -2,6 +2,8 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, TrendingUp, Share2 } from "lucide-react";
 import BottomNav from "@/components/BottomNav";
+import { scoreGait } from "@/utils/clinicalMetrics";
+import { addTestRecord } from "@/utils/testHistory";
 
 declare global { interface Window { Pose: any; Camera: any; } }
 
@@ -10,7 +12,7 @@ type Phase = "intro" | "running" | "result";
 interface Particle { x:number;y:number;vx:number;vy:number;size:number;color:string;life:number;rot:number;rotV:number; }
 
 const PCOLS = ['#22d3ee','#f0abfc','#fbbf24','#34d399','#f87171','#a78bfa','#fff'];
-const ARM_WIN=30, STRIDE_WIN=30, VEL_WIN=15;
+const ARM_WIN=30, STRIDE_WIN=30;
 const CONNECTIONS:number[][] = [[11,12],[11,13],[13,15],[12,14],[14,16],[11,23],[12,24],[23,24],[23,25],[25,27],[24,26],[26,28]];
 
 const WalkingTest = () => {
@@ -45,11 +47,18 @@ const WalkingTest = () => {
   const leftWristBuf = useRef<number[]>([]);
   const rightWristBuf = useRef<number[]>([]);
   const ankleGapBuf = useRef<number[]>([]);
-  const hipVelBuf = useRef<number[]>([]);
-  const prevHipX = useRef<number|null>(null);
   const shoulderWidthBuf = useRef<number[]>([]);
   const turnActive = useRef(false);
   const turnStepCount = useRef(0);
+  const maxTurnSteps = useRef(0);
+  // Cadence detection: count steps from oscillation of relative ankle height.
+  // (Robust to walking toward the camera, unlike horizontal hip velocity.)
+  const ankleDiffSmooth = useRef<number>(0);
+  const ankleDiffSign = useRef<0 | 1 | -1>(0);
+  const stepCount = useRef(0);
+  // Trunk angle running average (last-frame value alone is noisy).
+  const trunkAngleSum = useRef(0);
+  const trunkAngleCount = useRef(0);
   const metricsRef = useRef({ asymmetryRatio:0, shuffling:false, bradykinesia:false, trunkAngle:0, stooped:false, impaired_turn:false, flagCount:0 });
   const flagsRef = useRef({ asym:false, shuffle:false, brady:false, stoop:false, turn:false });
 
@@ -58,8 +67,9 @@ const WalkingTest = () => {
     leftArmRangeMax: 0, rightArmRangeMax: 0,
     legRaiseMax: 0,       // max ankle-above-hip distance
     avgStepGap: 0,
-    avgHipVel: 0,
-    trunkAngleFinal: 0,
+    cadence: 0,           // steps per second (from ankle oscillation)
+    trunkAngleAvg: 0,
+    turnSteps: 0,
     asymmetryRatioFinal: 0,
   });
 
@@ -130,18 +140,25 @@ const WalkingTest = () => {
     setStepLen({text:`Avg gap: ${avgGap.toFixed(3)}`,cls:shuffling?'bad':'ok'});
     updateFlags({...flagsRef.current, shuffle:shuffling});
 
-    // Walking speed
-    const hipX=(lh.x+rh.x)/2;
-    if(prevHipX.current!==null){
-      hipVelBuf.current.push(Math.abs(hipX-prevHipX.current));
-      if(hipVelBuf.current.length>VEL_WIN) hipVelBuf.current.shift();
-      const avgVel=hipVelBuf.current.reduce((a,b)=>a+b,0)/hipVelBuf.current.length;
-      detailRef.current.avgHipVel=avgVel;
-      const brady=avgVel<0.005;
-      setWalkSpeed({text:`Vel: ${avgVel.toFixed(4)}`,cls:brady?'warn':'ok'});
-      updateFlags({...flagsRef.current, brady});
+    // Cadence — count steps from oscillation of relative ankle height.
+    // The vertical separation (la.y - ra.y) swings sign once per step, which
+    // works even when the subject walks toward/away from the camera (where
+    // horizontal hip velocity is meaningless due to perspective).
+    const ankleDiff = la.y - ra.y;
+    ankleDiffSmooth.current = ankleDiffSmooth.current * 0.7 + ankleDiff * 0.3;
+    const HYST = 0.015; // dead-band to reject jitter
+    const sign: 0 | 1 | -1 =
+      ankleDiffSmooth.current > HYST ? 1 : ankleDiffSmooth.current < -HYST ? -1 : 0;
+    if (sign !== 0 && sign !== ankleDiffSign.current && ankleDiffSign.current !== 0) {
+      stepCount.current += 1;
     }
-    prevHipX.current=hipX;
+    if (sign !== 0) ankleDiffSign.current = sign;
+    const elapsedSec = Math.max(testTimeRef.current, 0.1);
+    const cadence = stepCount.current / elapsedSec;
+    detailRef.current.cadence = cadence;
+    const lowCadence = testTimeRef.current >= 4 && cadence < 1.3;
+    setWalkSpeed({ text: `${cadence.toFixed(1)} steps/s`, cls: lowCadence ? 'warn' : 'ok' });
+    updateFlags({ ...flagsRef.current, brady: lowCadence });
 
     // Trunk angle
     const smx=(ls.x+rs.x)/2,smy=(ls.y+rs.y)/2;
@@ -149,7 +166,9 @@ const WalkingTest = () => {
     const tvx=smx-hmx,tvy=smy-hmy;
     const mag=Math.sqrt(tvx**2+tvy**2)+1e-6;
     const trunkAngle=Math.acos(Math.max(-1,Math.min(1,(tvy*(-1))/mag)))*180/Math.PI;
-    detailRef.current.trunkAngleFinal=trunkAngle;
+    trunkAngleSum.current+=trunkAngle;
+    trunkAngleCount.current+=1;
+    detailRef.current.trunkAngleAvg=trunkAngleSum.current/trunkAngleCount.current;
     const stooped=trunkAngle>15;
     setTrunkPost({text:`${trunkAngle.toFixed(1)}°`,cls:stooped?'warn':'ok'});
     updateFlags({...flagsRef.current, stoop:stooped});
@@ -165,7 +184,9 @@ const WalkingTest = () => {
       if(turningNow&&!turnActive.current){turnActive.current=true;turnStepCount.current=0;}
       if(!turningNow&&turnActive.current){
         turnActive.current=false;
-        const impaired=turnStepCount.current>3;
+        maxTurnSteps.current=Math.max(maxTurnSteps.current, turnStepCount.current);
+        detailRef.current.turnSteps=maxTurnSteps.current;
+        const impaired=turnStepCount.current>4;
         updateFlags({...flagsRef.current, turn:impaired});
         if(impaired) awardPoints(5);
         const canvas=canvasRef.current;
@@ -259,10 +280,12 @@ const WalkingTest = () => {
   },[onPoseResults,renderLoop]);
 
   const startTest=()=>{
-    leftWristBuf.current=[];rightWristBuf.current=[];ankleGapBuf.current=[];hipVelBuf.current=[];
-    prevHipX.current=null;shoulderWidthBuf.current=[];turnActive.current=false;turnStepCount.current=0;
+    leftWristBuf.current=[];rightWristBuf.current=[];ankleGapBuf.current=[];
+    shoulderWidthBuf.current=[];turnActive.current=false;turnStepCount.current=0;maxTurnSteps.current=0;
+    ankleDiffSmooth.current=0;ankleDiffSign.current=0;stepCount.current=0;
+    trunkAngleSum.current=0;trunkAngleCount.current=0;
     scoreRef.current=0;starsRef.current=0;testTimeRef.current=0;particlesRef.current=[];
-    detailRef.current={leftArmRangeMax:0,rightArmRangeMax:0,legRaiseMax:0,avgStepGap:0,avgHipVel:0,trunkAngleFinal:0,asymmetryRatioFinal:0};
+    detailRef.current={leftArmRangeMax:0,rightArmRangeMax:0,legRaiseMax:0,avgStepGap:0,cadence:0,trunkAngleAvg:0,turnSteps:0,asymmetryRatioFinal:0};
     setScore(0);setStars(0);setFlags({asym:false,shuffle:false,brady:false,stoop:false,turn:false});setFlagCount(0);
     runningRef.current=true; setPhase('running');
     timerRef.current=setInterval(()=>{
@@ -276,11 +299,41 @@ const WalkingTest = () => {
     if(timerRef.current) clearInterval(timerRef.current);
     runningRef.current=false;
     const fc=metricsRef.current.flagCount;
-    let riskLevel='Low',riskColor='#5DBEA3',riskBg='#D4F1E8';
-    if(fc>2){riskLevel='High';riskColor='#FF5A5A';riskBg='#FFE8E8';}
-    else if(fc>0){riskLevel='Medium';riskColor='#FF9F43';riskBg='#FFF3E0';}
-    const riskPct = fc===0?15:fc<=2?50:85;
-    setResultData({fc,riskLevel,riskColor,riskBg,riskPct,score:scoreRef.current,stars:starsRef.current,detail:{...detailRef.current},flags:{...flagsRef.current}});
+
+    // Research-based composite gait risk (MDS-UPDRS 3.10 markers: arm-swing
+    // amplitude & asymmetry, cadence, trunk posture, turning). See
+    // src/utils/clinicalMetrics.ts.
+    const d=detailRef.current;
+    const clinical=scoreGait({
+      leftArmRange:d.leftArmRangeMax,
+      rightArmRange:d.rightArmRangeMax,
+      cadence:d.cadence,
+      trunkAngle:d.trunkAngleAvg,
+      turnSteps:d.turnSteps,
+    });
+    const riskPct=clinical.score;
+    const riskLevel=clinical.level;
+    const riskColor=riskLevel==='High'?'#FF5A5A':riskLevel==='Medium'?'#FF9F43':'#5DBEA3';
+    const riskBg=riskLevel==='High'?'#FFE8E8':riskLevel==='Medium'?'#FFF3E0':'#D4F1E8';
+
+    try {
+      addTestRecord({
+        type: 'GAIT',
+        name: 'Walking / Gait Test',
+        riskScore: riskPct / 100,
+        riskLevel,
+        metadata: {
+          armAsymmetry: d.asymmetryRatioFinal,
+          cadence: d.cadence,
+          trunkAngle: d.trunkAngleAvg,
+          turnSteps: d.turnSteps,
+          leftArmSwing: d.leftArmRangeMax,
+          rightArmSwing: d.rightArmRangeMax,
+        },
+      });
+    } catch (e) { console.error('addTestRecord error:', e); }
+
+    setResultData({fc,riskLevel,riskColor,riskBg,riskPct,subScores:clinical.subScores,score:scoreRef.current,stars:starsRef.current,detail:{...detailRef.current},flags:{...flagsRef.current}});
     setPhase('result');
   };
 
@@ -332,37 +385,35 @@ const WalkingTest = () => {
             </p>
           </div>
 
-          {/* Movement Metrics Grid */}
+          {/* Movement Metrics Grid — measured pose signals */}
           <div className="grid grid-cols-2 gap-3 mb-6">
             <div className="bg-white rounded-2xl p-4 shadow-sm">
               <p className="text-xs font-semibold text-[#6B6B6B] uppercase tracking-wide mb-1">Left Arm Swing</p>
               <p className="text-2xl font-bold text-[#1A1A1A]">{(detail.leftArmRangeMax*100).toFixed(1)}<span className="text-sm font-normal text-[#6B6B6B]"> u</span></p>
-              <div className="flex gap-1 h-6 items-end mt-2">{[40,55,50,60,45].map((h,i)=><div key={i} className="flex-1 rounded-t" style={{height:`${h}%`,backgroundColor:'#FFD4B8'}}/>)}</div>
             </div>
             <div className="bg-white rounded-2xl p-4 shadow-sm">
               <p className="text-xs font-semibold text-[#6B6B6B] uppercase tracking-wide mb-1">Right Arm Swing</p>
               <p className="text-2xl font-bold text-[#1A1A1A]">{(detail.rightArmRangeMax*100).toFixed(1)}<span className="text-sm font-normal text-[#6B6B6B]"> u</span></p>
-              <div className="flex gap-1 h-6 items-end mt-2">{[50,45,60,55,40].map((h,i)=><div key={i} className="flex-1 rounded-t" style={{height:`${h}%`,backgroundColor:'#C8E6DD'}}/>)}</div>
             </div>
             <div className="bg-white rounded-2xl p-4 shadow-sm">
-              <p className="text-xs font-semibold text-[#6B6B6B] uppercase tracking-wide mb-1">Leg Raise Height</p>
-              <p className="text-2xl font-bold text-[#1A1A1A]">{(detail.legRaiseMax*100).toFixed(1)}<span className="text-sm font-normal text-[#6B6B6B]"> u</span></p>
-              <div className="flex gap-1 h-6 items-end mt-2">{[60,70,65,75,68].map((h,i)=><div key={i} className="flex-1 rounded-t" style={{height:`${h}%`,backgroundColor:'#DDD8F5'}}/>)}</div>
+              <p className="text-xs font-semibold text-[#6B6B6B] uppercase tracking-wide mb-1">Cadence</p>
+              <p className="text-2xl font-bold text-[#1A1A1A]">{detail.cadence.toFixed(1)}<span className="text-sm font-normal text-[#6B6B6B]"> steps/s</span></p>
+              <p className="text-xs mt-1" style={{color:detail.cadence>=1.3?'#5DBEA3':'#FF8C42'}}>{detail.cadence>=1.3?'Normal':'Reduced'}</p>
             </div>
             <div className="bg-white rounded-2xl p-4 shadow-sm">
               <p className="text-xs font-semibold text-[#6B6B6B] uppercase tracking-wide mb-1">Trunk Angle</p>
-              <p className="text-2xl font-bold text-[#1A1A1A]">{detail.trunkAngleFinal.toFixed(1)}<span className="text-sm font-normal text-[#6B6B6B]">°</span></p>
-              <div className="flex gap-1 h-6 items-end mt-2">{[55,60,58,62,57].map((h,i)=><div key={i} className="flex-1 rounded-t" style={{height:`${h}%`,backgroundColor:'#FFD4B8'}}/>)}</div>
+              <p className="text-2xl font-bold text-[#1A1A1A]">{detail.trunkAngleAvg.toFixed(1)}<span className="text-sm font-normal text-[#6B6B6B]">°</span></p>
+              <p className="text-xs mt-1" style={{color:detail.trunkAngleAvg<15?'#5DBEA3':'#FF8C42'}}>{detail.trunkAngleAvg<15?'Upright':'Stooped'}</p>
             </div>
             <div className="bg-white rounded-2xl p-4 shadow-sm">
-              <p className="text-xs font-semibold text-[#6B6B6B] uppercase tracking-wide mb-1">Asymmetry Ratio</p>
+              <p className="text-xs font-semibold text-[#6B6B6B] uppercase tracking-wide mb-1">Arm Asymmetry</p>
               <p className="text-2xl font-bold" style={{color:detail.asymmetryRatioFinal>0.35?'#FF5A5A':'#5DBEA3'}}>{detail.asymmetryRatioFinal.toFixed(2)}</p>
               <p className="text-xs text-[#6B6B6B] mt-1">{detail.asymmetryRatioFinal>0.35?'Asymmetric':'Symmetric'}</p>
             </div>
             <div className="bg-white rounded-2xl p-4 shadow-sm">
-              <p className="text-xs font-semibold text-[#6B6B6B] uppercase tracking-wide mb-1">Step Width</p>
-              <p className="text-2xl font-bold text-[#1A1A1A]">{(detail.avgStepGap*100).toFixed(1)}<span className="text-sm font-normal text-[#6B6B6B]"> u</span></p>
-              <p className="text-xs text-[#6B6B6B] mt-1">{detail.avgStepGap<0.12?'Shuffling':'Normal'}</p>
+              <p className="text-xs font-semibold text-[#6B6B6B] uppercase tracking-wide mb-1">Turn Steps</p>
+              <p className="text-2xl font-bold text-[#1A1A1A]">{detail.turnSteps.toFixed(0)}</p>
+              <p className="text-xs text-[#6B6B6B] mt-1">{detail.turnSteps<=4?'Efficient':'En bloc'}</p>
             </div>
           </div>
 
@@ -403,7 +454,7 @@ const WalkingTest = () => {
     <div style={{minHeight:'100vh',background:'linear-gradient(135deg,#0f0f23 0%,#1a1a2e 100%)',color:'#fff',fontFamily:'Menlo,Monaco,Consolas,monospace',display:'flex',alignItems:'center',justifyContent:'center',overflow:'hidden',position:'relative'}}>
 
       {/* HUD left */}
-      <div style={{position:'fixed',top:20,left:20,width:240,zIndex:50,background:'rgba(17,24,39,0.9)',backdropFilter:'blur(12px)',borderRadius:12,padding:20,border:'1px solid rgba(133,200,255,0.5)',boxShadow:'0 0 30px rgba(133,200,255,0.3)'}}>
+      <div style={{position:'fixed',top:12,left:12,width:'clamp(140px,40vw,240px)',zIndex:50,background:'rgba(17,24,39,0.92)',backdropFilter:'blur(12px)',borderRadius:12,padding:'clamp(10px,3vw,20px)',border:'1px solid rgba(133,200,255,0.5)',boxShadow:'0 0 30px rgba(133,200,255,0.3)',fontSize:'clamp(11px,3vw,14px)'}}>
         <div style={{fontSize:13,fontWeight:700,color:'#85c8ff',marginBottom:4}}>🚶 Walking Test</div>
         <div style={{fontSize:11,color:'#6b7280',marginBottom:12}}>Parkinson's Diagnostic</div>
         <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,textAlign:'center'}}>
@@ -420,7 +471,7 @@ const WalkingTest = () => {
       </div>
 
       {/* Flags panel right */}
-      <div style={{position:'fixed',top:20,right:20,width:200,zIndex:50,background:'rgba(17,24,39,0.9)',backdropFilter:'blur(12px)',borderRadius:12,padding:16,border:'1px solid rgba(214,250,97,0.3)',boxShadow:'0 0 20px rgba(214,250,97,0.2)'}}>
+      <div style={{position:'fixed',top:12,right:12,width:'clamp(120px,34vw,200px)',zIndex:50,background:'rgba(17,24,39,0.92)',backdropFilter:'blur(12px)',borderRadius:12,padding:'clamp(10px,2.5vw,16px)',border:'1px solid rgba(214,250,97,0.3)',boxShadow:'0 0 20px rgba(214,250,97,0.2)',fontSize:'clamp(10px,2.6vw,13px)'}}>
         <div style={{fontSize:12,fontWeight:700,color:'#d6fa61',marginBottom:10}}>⚠ Clinical Flags</div>
         {[{key:'asym',label:'Arm asymmetry'},{key:'shuffle',label:'Shuffling gait'},{key:'brady',label:'Bradykinesia'},{key:'stoop',label:'Forward stoop'},{key:'turn',label:'Impaired turn'}].map(({key,label})=>(
           <div key={key} style={{display:'flex',alignItems:'center',gap:8,padding:'6px 0',fontSize:13,borderBottom:'1px solid rgba(255,255,255,0.06)'}}>
@@ -436,8 +487,9 @@ const WalkingTest = () => {
         </div>
       </div>
 
-      {/* Game container */}
-      <div ref={containerRef} style={{position:'relative',width:'calc(100vw - 560px)',marginLeft:260,height:'85vh',maxWidth:1000,maxHeight:750,border:'1px solid rgba(133,200,255,0.5)',borderRadius:20,overflow:'hidden',background:'#1b2337',boxShadow:'0 0 15px #1a2a4a,0 0 25px rgba(133,200,255,0.3)'}}>
+      {/* Game container — fills the screen; HUD panels overlay on top so the
+          layout works on phone widths as well as desktop. */}
+      <div ref={containerRef} style={{position:'relative',width:'100%',height:'100vh',maxWidth:1200,border:'1px solid rgba(133,200,255,0.5)',overflow:'hidden',background:'#1b2337',boxShadow:'0 0 25px rgba(133,200,255,0.3)'}}>
         <video ref={videoRef} autoPlay muted playsInline style={{width:'100%',height:'100%',objectFit:'cover',transform:'scaleX(-1)'}}/>
         <canvas ref={canvasRef} style={{position:'absolute',top:0,left:0,width:'100%',height:'100%',pointerEvents:'none'}}/>
       </div>
@@ -445,7 +497,7 @@ const WalkingTest = () => {
       {/* Intro overlay */}
       {phase==='intro'&&(
         <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.95)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:60}}>
-          <div style={{background:'#111827',borderRadius:16,padding:40,border:'2px solid rgba(133,200,255,0.3)',textAlign:'center',maxWidth:560}}>
+          <div style={{background:'#111827',borderRadius:16,padding:'clamp(20px,5vw,40px)',border:'2px solid rgba(133,200,255,0.3)',textAlign:'center',width:'min(90vw,560px)',maxHeight:'90vh',overflowY:'auto'}}>
             <div style={{fontSize:48,marginBottom:12}}>🚶‍♂️</div>
             <h2 style={{fontSize:30,fontWeight:'bold',marginBottom:16,color:'#85c8ff'}}>Diagnostic Walking Test</h2>
             <p style={{color:'#d1d5db',marginBottom:24,lineHeight:1.7,fontSize:14}}>

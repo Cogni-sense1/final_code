@@ -61,9 +61,34 @@
     @apply border-border;
   }
 
+  html {
+    scroll-behavior: smooth;
+    -webkit-text-size-adjust: 100%;
+  }
+
   body {
     @apply bg-background text-foreground font-sans antialiased;
     font-family: 'Plus Jakarta Sans', sans-serif;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    /* Avoid rubber-band scroll chaining on mobile web app */
+    overscroll-behavior-y: none;
+  }
+
+  /* Remove the grey tap flash on mobile and make interactive elements feel native */
+  button, a, [role="button"], input, select, textarea {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  button, a, [role="button"] {
+    touch-action: manipulation;
+  }
+
+  /* Consistent, smooth interaction feel for the app's buttons */
+  button:not(:disabled) {
+    transition: transform 0.12s cubic-bezier(0.4, 0, 0.2, 1),
+                box-shadow 0.2s ease, background-color 0.2s ease, opacity 0.2s ease;
   }
 }
 
@@ -107,6 +132,72 @@
   .animate-fade-in {
     animation: fade-in 0.5s ease-out forwards;
     opacity: 0;
+  }
+
+  /* Route/page enter transition — applied by the PageTransition wrapper */
+  .page-enter {
+    animation: page-enter 0.32s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  .animate-scale-in {
+    animation: scale-in 0.3s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  .animate-slide-up {
+    animation: slide-up 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  /* Staggered list-item entrance: add .stagger-item and it self-delays by index
+     via inline --i, or use the nth-child fallbacks below. */
+  .stagger-item {
+    animation: fade-in 0.45s ease-out both;
+    animation-delay: calc(var(--i, 0) * 60ms);
+    opacity: 0;
+  }
+
+  /* Skeleton shimmer for loading states */
+  .skeleton {
+    background: linear-gradient(90deg, #ECECEC 25%, #F5F5F5 37%, #ECECEC 63%);
+    background-size: 400% 100%;
+    animation: shimmer 1.4s ease infinite;
+  }
+
+  /* Press feedback helper for tappable cards */
+  .tappable {
+    transition: transform 0.12s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.2s ease;
+  }
+  .tappable:active {
+    transform: scale(0.98);
+  }
+}
+
+@keyframes page-enter {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes scale-in {
+  from { opacity: 0; transform: scale(0.95); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes slide-up {
+  from { opacity: 0; transform: translateY(100%); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes shimmer {
+  0% { background-position: 100% 0; }
+  100% { background-position: -100% 0; }
+}
+
+/* Respect users who prefer reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
   }
 }
 

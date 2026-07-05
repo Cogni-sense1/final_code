@@ -1,8 +1,10 @@
 // Test History Management with localStorage
 
+export type TestType = 'VOICE' | 'FACE' | 'FINGER_TAP' | 'GAIT' | 'LSVT_BIG' | 'DRAWING';
+
 export interface TestRecord {
   id: string;
-  type: 'VOICE' | 'FACE' | 'FINGER_TAP';
+  type: TestType;
   name: string;
   riskScore: number; // 0-1 (e.g., 0.45 = 45%)
   riskLevel: 'Low' | 'Medium' | 'High';
@@ -26,6 +28,25 @@ export interface TestRecord {
     fatigueDropRight?: number;
     tremorScoreLeft?: number;
     tremorScoreRight?: number;
+    // Gait / walking fields
+    armAsymmetry?: number;
+    cadence?: number;
+    trunkAngle?: number;
+    turnSteps?: number;
+    leftArmSwing?: number;
+    rightArmSwing?: number;
+    // LSVT BIG fields
+    hits?: number;
+    avgReach?: number;
+    maxReach?: number;
+    // Drawing fields
+    tremorIndex?: number;
+    speedCV?: number;
+    meanSpeed?: number;
+    spiralRMSE?: number;
+    strokeCount?: number;
+    totalTime?: number;
+    task?: string;
   };
 }
 
@@ -68,7 +89,7 @@ export const addTestRecord = (record: Omit<TestRecord, 'id' | 'timestamp'>): Tes
 };
 
 // Get records by type
-export const getTestsByType = (type: 'VOICE' | 'FACE' | 'FINGER_TAP'): TestRecord[] => {
+export const getTestsByType = (type: TestType): TestRecord[] => {
   return getTestHistory().filter(record => record.type === type);
 };
 

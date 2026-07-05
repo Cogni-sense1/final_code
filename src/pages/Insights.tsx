@@ -1,14 +1,17 @@
 import { useNavigate } from "react-router-dom";
-import { Calendar, Mic, Smile, FileText, Sparkles } from "lucide-react";
+import { Calendar, Sparkles } from "lucide-react";
 import BottomNav from "@/components/BottomNav";
 import { useState, useEffect } from "react";
 import { getRecentTests, getDailyAggregatedData, getAverageRisk, formatTimestamp } from "@/utils/testHistory";
+import { computeCombinedRiskFromHistory, MODALITY_LABELS, CombinedResult } from "@/utils/combinedRisk";
+import { getTestTypeMeta } from "@/utils/testTypeMeta";
 
 const Insights = () => {
   const navigate = useNavigate();
   const [recentTests, setRecentTests] = useState(getRecentTests(3));
   const [chartData, setChartData] = useState(getDailyAggregatedData(7));
   const [avgRisk, setAvgRisk] = useState(getAverageRisk(7));
+  const [combined, setCombined] = useState<CombinedResult>(() => computeCombinedRiskFromHistory());
 
   // Refresh data periodically
   useEffect(() => {
@@ -16,6 +19,7 @@ const Insights = () => {
       setRecentTests(getRecentTests(3));
       setChartData(getDailyAggregatedData(7));
       setAvgRisk(getAverageRisk(7));
+      setCombined(computeCombinedRiskFromHistory());
     };
 
     loadData();
@@ -84,6 +88,68 @@ const Insights = () => {
             <Calendar size={24} className="text-[#1A1A1A]" />
           </button>
         </div>
+
+        {/* Combined Screening Score Card */}
+        {(() => {
+          const cbColor = combined.level === 'Low' ? '#5DBEA3' : combined.level === 'Medium' ? '#FF9F43' : '#FF6B6B';
+          const cbBg = combined.level === 'Low' ? '#D4F1E8' : combined.level === 'Medium' ? '#FFE8D6' : '#FFE0E0';
+          return (
+            <div className="bg-white rounded-3xl p-6 mb-6 shadow-sm animate-fade-in">
+              <div className="flex items-center justify-between mb-1">
+                <h2 className="text-xl font-bold text-[#1A1A1A]">Combined Screening Score</h2>
+              </div>
+              <p className="text-sm text-[#6B6B6B] mb-5">Weighted fusion of your latest exercises</p>
+
+              {combined.modalitiesUsed === 0 ? (
+                <div className="text-center py-8">
+                  <p className="text-[#6B6B6B] text-sm">Complete some exercises to get a combined prediction.</p>
+                </div>
+              ) : (
+                <>
+                  <div className="flex items-center gap-5 mb-5">
+                    <div className="relative w-24 h-24 flex-shrink-0">
+                      <svg viewBox="0 0 96 96" className="w-full h-full -rotate-90">
+                        <circle cx="48" cy="48" r="40" fill="none" stroke="#F0F0F0" strokeWidth="10" />
+                        <circle cx="48" cy="48" r="40" fill="none" stroke={cbColor} strokeWidth="10"
+                          strokeLinecap="round" strokeDasharray={`${(combined.score) * 251.2} 251.2`} />
+                      </svg>
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <span className="text-2xl font-bold" style={{ color: cbColor }}>{combined.percentage}%</span>
+                      </div>
+                    </div>
+                    <div className="flex-1">
+                      <span className="text-sm font-bold px-3 py-1 rounded-full" style={{ backgroundColor: cbBg, color: cbColor }}>
+                        {combined.level} Risk
+                      </span>
+                      <p className="text-xs text-[#999999] mt-2">
+                        {combined.modalitiesUsed} of {combined.contributions.length} tests · confidence {Math.round(combined.confidence * 100)}%
+                      </p>
+                      <p className="text-[11px] text-[#B8B8B8] mt-1">Screening aid only — not a diagnosis.</p>
+                    </div>
+                  </div>
+
+                  {/* Per-modality contribution breakdown */}
+                  <div className="flex flex-col gap-2.5">
+                    {combined.contributions.map((c) => (
+                      <div key={c.modality} className="flex items-center gap-3">
+                        <span className="text-xs text-[#6B6B6B] w-24 flex-shrink-0">{MODALITY_LABELS[c.modality]}</span>
+                        <div className="flex-1 h-2 bg-[#F0F0F0] rounded-full overflow-hidden">
+                          <div className="h-full rounded-full" style={{
+                            width: `${c.present ? Math.round(c.risk * 100) : 0}%`,
+                            backgroundColor: c.present ? cbColor : '#E0E0E0',
+                          }} />
+                        </div>
+                        <span className="text-[11px] font-semibold text-[#999999] w-24 text-right">
+                          {c.present ? `${Math.round(c.risk * 100)}% · w${Math.round(c.effectiveWeight * 100)}%` : 'not done'}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+          );
+        })()}
 
         {/* Risk Score Trend Card */}
         <div className="bg-white rounded-3xl p-6 mb-6 shadow-sm animate-fade-in">
@@ -207,22 +273,22 @@ const Insights = () => {
           ) : (
             <div className="flex flex-col gap-3">
               {recentTests.map((test, index) => {
-                const Icon = test.type === 'VOICE' ? Mic : Smile;
-                const iconBg = test.riskLevel === 'Low' ? '#D4F1E8' : test.riskLevel === 'Medium' ? '#FFE8D6' : '#FFE0E0';
-                const iconColor = test.riskLevel === 'Low' ? '#5DBEA3' : test.riskLevel === 'Medium' ? '#FF9F43' : '#FF6B6B';
+                const meta = getTestTypeMeta(test.type);
+                const Icon = meta.icon;
                 const riskPercent = Math.round(test.riskScore * 100);
-                
+
                 return (
-                  <div
+                  <button
                     key={test.id}
-                    className="bg-white rounded-2xl p-4 flex items-center gap-4 shadow-sm"
-                    style={{ animationDelay: `${0.15 + index * 0.05}s` }}
+                    onClick={() => navigate(meta.route)}
+                    className="bg-white rounded-2xl p-4 flex items-center gap-4 shadow-sm hover:shadow-md transition-all active:scale-[0.98] text-left w-full stagger-item"
+                    style={{ ["--i" as string]: index }}
                   >
                     <div
                       className="w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0"
-                      style={{ backgroundColor: iconBg }}
+                      style={{ backgroundColor: meta.iconBg }}
                     >
-                      <Icon size={24} style={{ color: iconColor }} strokeWidth={2.5} />
+                      <Icon size={24} style={{ color: meta.iconColor }} strokeWidth={2.5} />
                     </div>
                     <div className="flex-1">
                       <h3 className="text-base font-bold text-[#1A1A1A] mb-0.5">{test.name}</h3>
@@ -234,7 +300,7 @@ const Insights = () => {
                         {test.riskLevel.toUpperCase()} RISK
                       </span>
                     </div>
-                  </div>
+                  </button>
                 );
               })}
             </div>

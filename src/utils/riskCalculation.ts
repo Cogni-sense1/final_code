@@ -1,88 +1,44 @@
 import { RiskResult } from '@/types/mediapipe';
+import { scoreFace } from '@/utils/clinicalMetrics';
 
+/**
+ * Facial screening risk from FaceMesh-derived signals.
+ *
+ * Delegates to the research-grounded scoring in clinicalMetrics.ts
+ * (MDS-UPDRS 3.2 facial-expression / hypomimia markers):
+ *   - blinkRate  : spontaneous blinks per minute (reduced in PD)
+ *   - rigidity   : mean facial expression motion amplitude (reduced = hypomimia)
+ *   - asymmetry  : facial asymmetry (weighted low; PD is typically bilateral)
+ *
+ * `rigidity` is the raw normalised facial-motion value (~0.001–0.005 range);
+ * the previous implementation multiplied it by 1000 for display only.
+ */
 export const calculateRiskFromSignals = (
   blinkRate: number,
   rigidity: number,
   asymmetry: number
 ): RiskResult => {
-  let riskScore = 0;
-  let blinkPoints = 0;
-  let motionPoints = 0;
-  let asymPoints = 0;
-
-  // 1️⃣ BLINK RATE ANALYSIS (40% weight = 40 max points)
-  if (blinkRate >= 17) {
-    blinkPoints = 0;
-  } else if (blinkRate >= 13) {
-    blinkPoints = 0;
-  } else if (blinkRate >= 10) {
-    blinkPoints = 12;
-  } else if (blinkRate >= 7) {
-    blinkPoints = 28;
-  } else if (blinkRate >= 4) {
-    blinkPoints = 36;
-  } else {
-    blinkPoints = 40;
-  }
-
-  // 2️⃣ FACIAL MOTION ANALYSIS (35% weight = 35 max points)
-  const motionScore = rigidity * 1000;
-
-  if (motionScore >= 4.0) {
-    motionPoints = 0;
-  } else if (motionScore >= 2.5) {
-    motionPoints = 0;
-  } else if (motionScore >= 1.5) {
-    motionPoints = 5;
-  } else if (motionScore >= 1.0) {
-    motionPoints = 15;
-  } else if (motionScore >= 0.6) {
-    motionPoints = 26;
-  } else {
-    motionPoints = 35;
-  }
-
-  // 3️⃣ ASYMMETRY ANALYSIS (25% weight = 25 max points)
-  if (asymmetry < 0.035) {
-    asymPoints = 0;
-  } else if (asymmetry < 0.05) {
-    asymPoints = 8;
-  } else if (asymmetry < 0.07) {
-    asymPoints = 16;
-  } else {
-    asymPoints = 25;
-  }
-
-  riskScore = blinkPoints + motionPoints + asymPoints;
-
-  console.log('🔍 Risk Score Breakdown:', {
-    'Blink Points': `${blinkPoints}/40 (rate: ${blinkRate.toFixed(1)}/min)`,
-    'Motion Points': `${motionPoints}/35 (score: ${motionScore.toFixed(2)})`,
-    'Asymmetry Points': `${asymPoints}/25 (value: ${asymmetry.toFixed(4)})`,
-    'TOTAL RISK': `${riskScore}/100`,
+  const clinical = scoreFace({
+    blinkRate,
+    expressionAmplitude: rigidity,
+    asymmetry,
   });
 
-  const riskPercentage = Math.round(riskScore);
-
-  let level: 'Low' | 'Medium' | 'High' = 'Low';
-  let color = '#5DBEA3';
-
-  if (riskPercentage >= 45) {
-    level = 'High';
-    color = '#FF8C42';
-  } else if (riskPercentage >= 20) {
-    level = 'Medium';
-    color = '#FF9F43';
-  }
+  const colorMap: Record<string, string> = {
+    Low: '#5DBEA3',
+    Medium: '#FF9F43',
+    High: '#FF8C42',
+  };
 
   return {
-    percentage: riskPercentage,
-    level,
-    color,
+    percentage: clinical.score,
+    level: clinical.level,
+    color: colorMap[clinical.level],
     details: {
-      blinkRate: blinkRate,
-      motion: motionScore,
-      asymmetry: asymmetry,
+      blinkRate,
+      // keep the ×1000 scaled value for existing UI thresholds/labels
+      motion: rigidity * 1000,
+      asymmetry,
     },
   };
 };

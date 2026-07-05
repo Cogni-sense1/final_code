@@ -1,5 +1,5 @@
 import { useNavigate } from "react-router-dom";
-import { Mic, Smile, Bell, ChevronRight, RotateCcw, Hand, Moon, Users, Pill, PersonStanding, Zap } from "lucide-react";
+import { Mic, Smile, Bell, ChevronRight, RotateCcw, Hand, Moon, Users, Pill, PersonStanding, Zap, Pencil } from "lucide-react";
 import BottomNav from "@/components/BottomNav";
 import { Button } from "@/components/ui/button";
 import { getFirstName } from "@/utils/userProfile";
@@ -125,6 +125,21 @@ const HomeDashboard = () => {
                 <p className="text-sm text-[#6B6B6B]">Motor coordination and rhythm test</p>
               </div>
               <ChevronRight size={22} className="text-[#7B68EE] group-hover:translate-x-0.5 transition-transform" strokeWidth={2.5} />
+            </button>
+
+            {/* Drawing Test Card */}
+            <button
+              onClick={() => navigate("/drawing-test")}
+              className="bg-[#FFE0D6] rounded-[20px] p-5 flex items-center gap-4 hover:shadow-md transition-all active:scale-[0.98] group"
+            >
+              <div className="w-[60px] h-[60px] rounded-[18px] bg-[#FF8C42] flex items-center justify-center flex-shrink-0">
+                <Pencil size={28} className="text-white" strokeWidth={2.5} />
+              </div>
+              <div className="flex-1 text-left">
+                <h3 className="text-lg font-bold text-[#1A1A1A] mb-1">Drawing Test</h3>
+                <p className="text-sm text-[#6B6B6B]">Spiral & wave tracing for fine motor control</p>
+              </div>
+              <ChevronRight size={22} className="text-[#FF8C42] group-hover:translate-x-0.5 transition-transform" strokeWidth={2.5} />
             </button>
 
             {/* Walking Test Card */}

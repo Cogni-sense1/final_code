@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, TrendingUp } from "lucide-react";
 import BottomNav from "@/components/BottomNav";
+import { addTestRecord } from "@/utils/testHistory";
 
 declare global { interface Window { Pose: any; Camera: any; } }
 
@@ -54,6 +55,10 @@ const LSVTBigTest = () => {
   const lastLmRef = useRef<any>(null);
   const spawnIdxRef = useRef(0);
   const hitCooldownRef = useRef(0);
+  // Reach amplitude (LSVT BIG's therapeutic target): wrist-to-shoulder
+  // excursion normalised by shoulder width, captured at each hit.
+  const reachSumRef = useRef(0);
+  const reachMaxRef = useRef(0);
 
   const burst = useCallback((x:number, y:number, count=32) => {
     for (let i=0; i<count; i++) {
@@ -73,8 +78,10 @@ const LSVTBigTest = () => {
     setTargetLabel(SPAWN_OFFSETS[next].label);
   }, []);
 
-  const registerHit = useCallback((sx: number, sy: number) => {
+  const registerHit = useCallback((sx: number, sy: number, reachAmp: number) => {
     hitsRef.current++;
+    reachSumRef.current += reachAmp;
+    reachMaxRef.current = Math.max(reachMaxRef.current, reachAmp);
     scoreRef.current += 10 + levelRef.current * 5;
     hitCooldownRef.current = HIT_COOLDOWN;
     burst(sx, sy, 36);
@@ -157,6 +164,14 @@ const LSVTBigTest = () => {
     const rdist = Math.sqrt((rwx-sx)**2+(rwy-sy)**2);
     const touching = (ldist < HIT_PX || rdist < HIT_PX) && hitCooldownRef.current === 0;
 
+    // Reach amplitude of the reaching hand, normalised by shoulder width so it
+    // is scale/distance invariant. This is the actual amplitude-training metric.
+    const shoulderW = Math.hypot(ls.x - rs.x, ls.y - rs.y) || 0.001;
+    const reaching = ldist <= rdist ? lm[15] : lm[16];
+    const reachAmp = reaching && reaching.visibility > 0.25
+      ? Math.hypot(reaching.x - midNx, reaching.y - midNy) / shoulderW
+      : 0;
+
     // Draw star ring
     const outerR = 54 + Math.sin(pulseRef.current) * 8;
     const innerR = 40 + Math.sin(pulseRef.current) * 5;
@@ -208,7 +223,7 @@ const LSVTBigTest = () => {
     ctx.fillText(off.label, W/2, H-18); ctx.restore();
 
     // Register hit instantly on touch
-    if (touching) registerHit(sx, sy);
+    if (touching) registerHit(sx, sy, reachAmp);
   }, [registerHit]);
 
   useEffect(() => {
@@ -247,6 +262,7 @@ const LSVTBigTest = () => {
   const startGame = () => {
     scoreRef.current=0; starsRef.current=0; hitsRef.current=0; levelRef.current=1;
     gameTimeRef.current=0; particlesRef.current=[]; hitCooldownRef.current=0; spawnIdxRef.current=0;
+    reachSumRef.current=0; reachMaxRef.current=0;
     setScore(0); setStars(0); setHits(0); setLevel(1); setTimerVal('0s / 30s');
     setTargetLabel(SPAWN_OFFSETS[0].label);
     runningRef.current=true; setPhase('running');
@@ -261,13 +277,31 @@ const LSVTBigTest = () => {
     if (timerRef.current) clearInterval(timerRef.current);
     runningRef.current = false;
     const h = hitsRef.current;
-    const perfLevel = h >= 7 ? 'HIGH' : h >= 3 ? 'MEDIUM' : 'LOW';
-    setResultData({ hits:h, perfLevel, score:scoreRef.current, stars:starsRef.current, level:levelRef.current });
+    const avgReach = h > 0 ? reachSumRef.current / h : 0;
+    // Combine reach count and reach amplitude: good LSVT BIG performance means
+    // many hits AND large, exaggerated reaches (avg reach ≳ 1.0 shoulder-widths).
+    const perfLevel = (h >= 7 && avgReach >= 0.9) ? 'HIGH'
+      : (h >= 3) ? 'MEDIUM' : 'LOW';
+
+    // Persist as a therapy record. LSVT BIG is amplitude training, not a
+    // diagnostic screen, so combinedRisk intentionally ignores this type.
+    // We store a "performance" score (higher perf = lower nominal risk value).
+    try {
+      addTestRecord({
+        type: 'LSVT_BIG',
+        name: 'LSVT BIG Training',
+        riskScore: perfLevel === 'HIGH' ? 0.15 : perfLevel === 'MEDIUM' ? 0.5 : 0.85,
+        riskLevel: perfLevel === 'HIGH' ? 'Low' : perfLevel === 'MEDIUM' ? 'Medium' : 'High',
+        metadata: { hits: h, avgReach, maxReach: reachMaxRef.current },
+      });
+    } catch (e) { console.error('addTestRecord error:', e); }
+
+    setResultData({ hits:h, perfLevel, score:scoreRef.current, stars:starsRef.current, level:levelRef.current, avgReach, maxReach:reachMaxRef.current });
     setPhase('result');
   };
 
   if (phase === 'result' && resultData) {
-    const { hits:h, perfLevel, score:sc, stars:st, level:lv } = resultData;
+    const { hits:h, perfLevel, score:sc, stars:st, level:lv, avgReach, maxReach } = resultData;
     const riskColor = perfLevel==='HIGH'?'#5DBEA3':perfLevel==='MEDIUM'?'#FF9F43':'#FF5A5A';
     const riskBg = perfLevel==='HIGH'?'#D4F1E8':perfLevel==='MEDIUM'?'#FFF3E0':'#FFE8E8';
     const pct = perfLevel==='HIGH'?85:perfLevel==='MEDIUM'?55:20;
@@ -305,7 +339,7 @@ const LSVTBigTest = () => {
                'Excellent amplitude training session! Your movement quality is strong.'}
             </p>
           </div>
-          <div className="grid grid-cols-3 gap-3 mb-6">
+          <div className="grid grid-cols-3 gap-3 mb-4">
             <div className="bg-white rounded-2xl p-4 shadow-sm text-center">
               <p className="text-2xl font-bold text-[#1A1A1A]">{h}</p>
               <p className="text-xs text-[#6B6B6B] mt-1">Stars Hit</p>
@@ -317,6 +351,18 @@ const LSVTBigTest = () => {
             <div className="bg-white rounded-2xl p-4 shadow-sm text-center">
               <p className="text-2xl font-bold text-[#1A1A1A]">{lv}</p>
               <p className="text-xs text-[#6B6B6B] mt-1">Level</p>
+            </div>
+          </div>
+
+          {/* Reach amplitude — the therapeutic target of LSVT BIG */}
+          <div className="grid grid-cols-2 gap-3 mb-6">
+            <div className="bg-white rounded-2xl p-4 shadow-sm text-center">
+              <p className="text-2xl font-bold" style={{color:(avgReach ?? 0)>=0.9?'#5DBEA3':'#FF8C42'}}>{(avgReach ?? 0).toFixed(2)}</p>
+              <p className="text-xs text-[#6B6B6B] mt-1">Avg Reach (shoulder-widths)</p>
+            </div>
+            <div className="bg-white rounded-2xl p-4 shadow-sm text-center">
+              <p className="text-2xl font-bold text-[#1A1A1A]">{(maxReach ?? 0).toFixed(2)}</p>
+              <p className="text-xs text-[#6B6B6B] mt-1">Max Reach</p>
             </div>
           </div>
           {st > 0 && (
@@ -361,9 +407,9 @@ const LSVTBigTest = () => {
       justifyContent:'center',overflow:'hidden',position:'relative'}}>
 
       {/* HUD */}
-      <div style={{position:'fixed',top:20,left:20,width:240,zIndex:50,background:'rgba(17,24,39,0.9)',
-        backdropFilter:'blur(12px)',borderRadius:12,padding:20,border:'1px solid rgba(214,250,97,0.4)',
-        boxShadow:'0 0 30px rgba(214,250,97,0.25)'}}>
+      <div style={{position:'fixed',top:12,left:12,width:'clamp(140px,40vw,240px)',zIndex:50,background:'rgba(17,24,39,0.92)',
+        backdropFilter:'blur(12px)',borderRadius:12,padding:'clamp(10px,3vw,20px)',border:'1px solid rgba(214,250,97,0.4)',
+        boxShadow:'0 0 30px rgba(214,250,97,0.25)',fontSize:'clamp(11px,3vw,14px)'}}>
         <div style={{fontSize:13,fontWeight:700,color:'#d6fa61',marginBottom:4}}>🌟 LSVT BIG Training</div>
         <div style={{fontSize:11,color:'#6b7280',marginBottom:14}}>Amplitude Therapy</div>
         <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,textAlign:'center'}}>
@@ -387,11 +433,12 @@ const LSVTBigTest = () => {
         </div>
       </div>
 
-      {/* Game container */}
-      <div ref={containerRef} style={{position:'relative',width:'calc(100vw - 560px)',marginLeft:260,
-        height:'85vh',maxWidth:1000,maxHeight:750,border:'1px solid rgba(214,250,97,0.5)',
-        borderRadius:20,overflow:'hidden',background:'#1b2337',
-        boxShadow:'0 0 15px #3f452b,0 0 25px rgba(214,250,97,0.3)'}}>
+      {/* Game container — fills the screen; HUD overlays on top so it works on
+          phone widths as well as desktop. */}
+      <div ref={containerRef} style={{position:'relative',width:'100%',
+        height:'100vh',maxWidth:1200,border:'1px solid rgba(214,250,97,0.5)',
+        overflow:'hidden',background:'#1b2337',
+        boxShadow:'0 0 25px rgba(214,250,97,0.3)'}}>
         <video ref={videoRef} autoPlay muted playsInline
           style={{width:'100%',height:'100%',objectFit:'cover',transform:'scaleX(-1)'}}/>
         <canvas ref={canvasRef}
@@ -402,8 +449,8 @@ const LSVTBigTest = () => {
       {phase === 'intro' && (
         <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.95)',display:'flex',
           alignItems:'center',justifyContent:'center',zIndex:60}}>
-          <div style={{background:'#111827',borderRadius:16,padding:40,
-            border:'2px solid rgba(214,250,97,0.3)',textAlign:'center',maxWidth:520}}>
+          <div style={{background:'#111827',borderRadius:16,padding:'clamp(20px,5vw,40px)',
+            border:'2px solid rgba(214,250,97,0.3)',textAlign:'center',width:'min(90vw,520px)',maxHeight:'90vh',overflowY:'auto'}}>
             <div style={{fontSize:48,marginBottom:12}}>🌟</div>
             <h2 style={{fontSize:30,fontWeight:'bold',marginBottom:16,color:'#d6fa61'}}>LSVT BIG Training</h2>
             <p style={{color:'#d1d5db',marginBottom:24,lineHeight:1.8,fontSize:14}}>

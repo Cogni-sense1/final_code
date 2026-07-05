@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Info, Eye, Heart, Wind, Activity, Share2, TrendingUp, Volume2 } from "lucide-react";
+import { ArrowLeft, Info, Eye, Activity, Share2, TrendingUp, Volume2 } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import { FacialData, FaceMeshResults, RiskResult } from "@/types/mediapipe";
 import { calculateRiskFromSignals } from "@/utils/riskCalculation";
@@ -24,10 +24,9 @@ const FaceTest = () => {
   const [currentPrompt, setCurrentPrompt] = useState(getRandomFacePrompt());
   const [hasPlayedPrompt, setHasPlayedPrompt] = useState(false);
   
-  // Real-time metrics display
+  // Real-time metrics display (only signals we actually measure from FaceMesh)
   const [blinkRate, setBlinkRate] = useState("--");
-  const [heartRate] = useState(72);
-  const [breathing] = useState("Normal");
+  const [motionStatus, setMotionStatus] = useState("Measuring…");
 
   // Refs
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -247,6 +246,13 @@ const FaceTest = () => {
     if (recording && timer > 0) {
       const currentBlinkRate = (facialDataRef.current.blinkCount / timer) * 60;
       setBlinkRate(currentBlinkRate.toFixed(0));
+
+      // Live facial-motion status from the most recent expression samples
+      const recent = facialDataRef.current.motionValues.slice(-30);
+      if (recent.length > 0) {
+        const avg = recent.reduce((a, b) => a + b, 0) / recent.length;
+        setMotionStatus(avg >= 0.0015 ? "Expressive" : avg >= 0.0009 ? "Reduced" : "Very reduced");
+      }
     }
   }, [recording, timer]);
 
@@ -451,15 +457,11 @@ const FaceTest = () => {
               <div className="absolute top-4 left-4 flex flex-col gap-2">
                 <div className="bg-white/90 backdrop-blur-sm rounded-full px-4 py-2 flex items-center gap-2 shadow-sm">
                   <Eye size={16} className="text-[#7B68EE]" />
-                  <span className="text-sm font-semibold text-[#1A1A1A]">Blink rate: {blinkRate}</span>
+                  <span className="text-sm font-semibold text-[#1A1A1A]">Blink rate: {blinkRate}/min</span>
                 </div>
                 <div className="bg-white/90 backdrop-blur-sm rounded-full px-4 py-2 flex items-center gap-2 shadow-sm">
-                  <Heart size={16} className="text-[#FF6B9D]" />
-                  <span className="text-sm font-semibold text-[#1A1A1A]">Heart rate: {heartRate} bpm</span>
-                </div>
-                <div className="bg-white/90 backdrop-blur-sm rounded-full px-4 py-2 flex items-center gap-2 shadow-sm">
-                  <Wind size={16} className="text-[#5DBEA3]" />
-                  <span className="text-sm font-semibold text-[#1A1A1A]">Breathing: {breathing}</span>
+                  <Activity size={16} className="text-[#FF8C42]" />
+                  <span className="text-sm font-semibold text-[#1A1A1A]">Facial motion: {motionStatus}</span>
                 </div>
               </div>
             )}
@@ -622,67 +624,52 @@ const FaceTest = () => {
           </p>
         </div>
 
-        {/* Metrics Grid */}
+        {/* Metrics Grid — only measured signals (blink rate, facial motion, asymmetry) */}
         <div className="grid grid-cols-2 gap-3 mb-8 animate-fade-in" style={{ animationDelay: "0.2s" }}>
           {/* Blink Rate */}
           <div className="bg-white rounded-2xl p-4 shadow-sm">
             <div className="flex items-center gap-2 mb-3">
               <Eye size={20} className="text-[#7B68EE]" />
-              <Info size={14} className="text-[#B8B8B8]" />
             </div>
             <p className="text-xs font-semibold text-[#6B6B6B] uppercase tracking-wide mb-1">Blink Rate</p>
-            <p className="text-2xl font-bold text-[#1A1A1A] mb-3">{result.details.blinkRate.toFixed(0)} bpm</p>
-            <div className="flex gap-1 h-8 items-end">
-              {[40, 60, 80, 70, 90].map((height, i) => (
-                <div key={i} className="flex-1 bg-[#B8B5FF] rounded-t" style={{ height: `${height}%` }} />
-              ))}
-            </div>
+            <p className="text-2xl font-bold text-[#1A1A1A] mb-1">{result.details.blinkRate.toFixed(0)}<span className="text-sm font-normal text-[#6B6B6B]">/min</span></p>
+            <p className="text-xs" style={{ color: result.details.blinkRate >= 12 ? '#5DBEA3' : '#FF8C42' }}>
+              {result.details.blinkRate >= 12 ? 'Normal (≥12)' : 'Reduced'}
+            </p>
           </div>
 
-          {/* Facial Motion */}
+          {/* Facial Motion / hypomimia */}
           <div className="bg-white rounded-2xl p-4 shadow-sm">
             <div className="flex items-center gap-2 mb-3">
               <Activity size={20} className="text-[#FF8C42]" />
-              <Info size={14} className="text-[#B8B8B8]" />
             </div>
             <p className="text-xs font-semibold text-[#6B6B6B] uppercase tracking-wide mb-1">Facial Motion</p>
-            <p className="text-2xl font-bold text-[#1A1A1A] mb-3">{result.details.motion > 1.5 ? 'Normal' : 'Reduced'}</p>
-            <div className="flex gap-1 h-8 items-end">
-              {[50, 70, 60, 80, 75].map((height, i) => (
-                <div key={i} className="flex-1 bg-[#FFD4B8] rounded-t" style={{ height: `${height}%` }} />
-              ))}
-            </div>
+            <p className="text-2xl font-bold text-[#1A1A1A] mb-1">{result.details.motion >= 1.5 ? 'Normal' : result.details.motion >= 0.9 ? 'Reduced' : 'Very low'}</p>
+            <p className="text-xs" style={{ color: result.details.motion >= 1.5 ? '#5DBEA3' : '#FF8C42' }}>
+              Expression amplitude
+            </p>
           </div>
 
           {/* Asymmetry */}
-          <div className="bg-white rounded-2xl p-4 shadow-sm">
+          <div className="bg-white rounded-2xl p-4 shadow-sm col-span-2">
             <div className="flex items-center gap-2 mb-3">
               <TrendingUp size={20} className="text-[#5DBEA3]" />
-              <Info size={14} className="text-[#B8B8B8]" />
             </div>
-            <p className="text-xs font-semibold text-[#6B6B6B] uppercase tracking-wide mb-1">Asymmetry</p>
-            <p className="text-2xl font-bold text-[#1A1A1A] mb-3">{(result.details.asymmetry * 100).toFixed(1)}%</p>
-            <div className="flex gap-1 h-8 items-end">
-              {[60, 50, 70, 55, 65].map((height, i) => (
-                <div key={i} className="flex-1 bg-[#C8E6DD] rounded-t" style={{ height: `${height}%` }} />
-              ))}
-            </div>
+            <p className="text-xs font-semibold text-[#6B6B6B] uppercase tracking-wide mb-1">Facial Asymmetry</p>
+            <p className="text-2xl font-bold text-[#1A1A1A] mb-1">{(result.details.asymmetry * 100).toFixed(1)}%</p>
+            <p className="text-xs" style={{ color: result.details.asymmetry < 0.035 ? '#5DBEA3' : '#FF8C42' }}>
+              {result.details.asymmetry < 0.035 ? 'Symmetric' : 'Mild asymmetry'}
+            </p>
           </div>
+        </div>
 
-          {/* Breathing */}
-          <div className="bg-white rounded-2xl p-4 shadow-sm">
-            <div className="flex items-center gap-2 mb-3">
-              <Wind size={20} className="text-[#9CA3AF]" />
-              <Info size={14} className="text-[#B8B8B8]" />
-            </div>
-            <p className="text-xs font-semibold text-[#6B6B6B] uppercase tracking-wide mb-1">Breathing</p>
-            <p className="text-2xl font-bold text-[#1A1A1A] mb-3">14 rpm</p>
-            <div className="flex gap-1 h-8 items-end">
-              {[55, 65, 60, 70, 58].map((height, i) => (
-                <div key={i} className="flex-1 bg-[#D1D5DB] rounded-t" style={{ height: `${height}%` }} />
-              ))}
-            </div>
-          </div>
+        {/* Honest note about what is not measured */}
+        <div className="bg-[#FFF4E6] rounded-2xl p-4 mb-8 flex items-start gap-3">
+          <Info size={16} className="text-[#FF8C42] flex-shrink-0 mt-0.5" />
+          <p className="text-xs text-[#6B6B6B] leading-relaxed">
+            This scan measures blink rate, facial expression amplitude, and symmetry from your camera.
+            Heart rate and breathing are not measured. This is a screening tool, not a diagnosis.
+          </p>
         </div>
 
         {/* Action Buttons */}

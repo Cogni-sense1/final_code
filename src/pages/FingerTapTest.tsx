@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Info, Activity, TrendingUp, Share2, AlertTriangle, TrendingDown } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import { addTestRecord, getTestsByType } from "@/utils/testHistory";
+import { scoreFingerTap } from "@/utils/clinicalMetrics";
 import BottomNav from "@/components/BottomNav";
 
 // Extend window for MediaPipe globals
@@ -573,8 +574,8 @@ const FingerTapTest = () => {
           ? safeStddev(state.itiList) / (safeMean(state.itiList) || 1)
           : 0).toFixed(2)),
       });
-      setLiveLeft(toLeft => ({ ...toLeft, ...toLeft, ...toLive(leftStateRef.current) }));
-      setLiveRight(toRight => ({ ...toRight, ...toLive(rightStateRef.current) }));
+      setLiveLeft(toLive(leftStateRef.current));
+      setLiveRight(toLive(rightStateRef.current));
 
       // Draw live distance graph
       drawDistGraph();
@@ -670,8 +671,24 @@ const FingerTapTest = () => {
 
     const leftMetrics = computeHandMetrics(leftStateRef.current, startTime, endTime);
     const rightMetrics = computeHandMetrics(rightStateRef.current, startTime, endTime);
-    const riskScore = computeRiskScore(leftMetrics, rightMetrics);
-    const riskLevel = mapRiskLevel(riskScore);
+
+    // Research-based composite risk (MDS-UPDRS 3.4 markers: speed, amplitude
+    // decrement / sequence effect, rhythm variability, inter-hand asymmetry,
+    // fatigue, tremor). See src/utils/clinicalMetrics.ts.
+    const clinical = scoreFingerTap({
+      tapsPerSecLeft: leftMetrics.taps_per_sec,
+      tapsPerSecRight: rightMetrics.taps_per_sec,
+      cvLeft: leftMetrics.interval_variability,
+      cvRight: rightMetrics.interval_variability,
+      amplitudesLeft: leftStateRef.current.taps.map(t => t.amplitude),
+      amplitudesRight: rightStateRef.current.taps.map(t => t.amplitude),
+      fatigueLeft: leftMetrics.fatigue_drop,
+      fatigueRight: rightMetrics.fatigue_drop,
+      tremorLeft: leftMetrics.tremor_score,
+      tremorRight: rightMetrics.tremor_score,
+    });
+    const riskScore = clinical.score;
+    const riskLevel = clinical.level;
 
     // Historical comparison
     let deltas: Record<string, number> | null = null;
