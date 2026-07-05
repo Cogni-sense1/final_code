@@ -3,7 +3,9 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { useEffect } from "react";
 import { hasCompletedOnboarding, hasSelectedRole, getUserRole } from "@/utils/userProfile";
+import { hydrateFromBackend } from "@/utils/testHistory";
 import RoleSelection from "./pages/RoleSelection";
 import Welcome from "./pages/Welcome";
 import HomeDashboard from "./pages/HomeDashboard";
@@ -72,7 +74,14 @@ const TestingRoute = ({ children }: { children: React.ReactNode }) => {
   return <>{children}</>;
 };
 
-const App = () => (
+const App = () => {
+  // Pull persisted history from the backend once on startup. Falls back
+  // silently to the localStorage cache if the backend is unreachable.
+  useEffect(() => {
+    void hydrateFromBackend();
+  }, []);
+
+  return (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
       <Toaster />
@@ -107,6 +116,7 @@ const App = () => (
       </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>
-);
+  );
+};
 
 export default App;

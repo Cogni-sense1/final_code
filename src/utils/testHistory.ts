@@ -32,6 +32,41 @@ export interface TestRecord {
 const STORAGE_KEY = 'neurovoice_test_history';
 const MAX_RECORDS = 50; // Keep last 50 tests
 
+// ─── Backend persistence (with graceful localStorage fallback) ───────────────
+//
+// Storage strategy:
+//   • localStorage is always the SYNCHRONOUS source of truth for reads, so the
+//     existing (synchronous) page code keeps working and the app runs fully
+//     offline / in demo mode.
+//   • Writes are "write-through": we save to localStorage immediately, then
+//     fire a best-effort POST to the backend. If the backend is unreachable the
+//     local copy is untouched and the error is swallowed (offline-friendly).
+//   • hydrateFromBackend() pulls server history on app start and, if reachable,
+//     refreshes the local cache so history persists across devices/browsers.
+//     If the backend is down, the local cache is left as-is.
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:5050';
+const USER_ID = 'local-user'; // placeholder until real auth exists
+const REQUEST_TIMEOUT_MS = 4000;
+
+const fetchWithTimeout = async (url: string, init?: RequestInit): Promise<Response> => {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+};
+
+// Overwrite the local cache directly (used by hydration).
+const writeCache = (records: TestRecord[]): void => {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(records.slice(0, MAX_RECORDS)));
+  } catch (error) {
+    console.error('Error writing test history cache:', error);
+  }
+};
+
 // Get all test records
 export const getTestHistory = (): TestRecord[] => {
   try {
@@ -64,7 +99,46 @@ export const addTestRecord = (record: Omit<TestRecord, 'id' | 'timestamp'>): Tes
     console.error('Error saving test record:', error);
   }
 
+  // Write-through to the backend (best-effort; ignore failures for offline use).
+  void saveRecordToBackend(newRecord);
+
   return newRecord;
+};
+
+// Best-effort POST of a single record to the backend. Never throws.
+const saveRecordToBackend = async (record: TestRecord): Promise<void> => {
+  try {
+    await fetchWithTimeout(`${API_BASE_URL}/api/results`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...record, userId: USER_ID }),
+    });
+  } catch {
+    // Backend unreachable — the local copy remains the source of truth.
+  }
+};
+
+/**
+ * Pull history from the backend and refresh the local cache. Call once on app
+ * start. If the backend is unreachable, the local cache is left untouched so
+ * the app keeps working offline. Returns true if hydration succeeded.
+ */
+export const hydrateFromBackend = async (): Promise<boolean> => {
+  try {
+    const res = await fetchWithTimeout(
+      `${API_BASE_URL}/api/results?userId=${encodeURIComponent(USER_ID)}`
+    );
+    if (!res.ok) return false;
+    const records = (await res.json()) as TestRecord[];
+    if (Array.isArray(records)) {
+      // Backend returns newest-first already; trust it as the source of truth.
+      writeCache(records);
+      return true;
+    }
+    return false;
+  } catch {
+    return false; // offline / backend down → keep localStorage
+  }
 };
 
 // Get records by type

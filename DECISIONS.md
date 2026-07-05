@@ -52,3 +52,18 @@ Detected with `npx depcheck` and confirmed by grep. Left in place per task instr
   - None of the failing suites import the files I changed (`caregiver.tsx`, `(tabs)/insights.tsx`, `constants/risk.ts`), so these failures are not caused by this work and were left as-is (fixing jest-expo native-module mocking is out of scope and risky).
 - **Committed venv noise:** `backend/python/not/` contains a checked-in Python 3.9 virtualenv. It looks like an accidental commit and inflates the repo, but deleting files beyond the unused-dependency removal is outside this task's scope, so it was left for human review.
 - `package-lock.json` (web) and the mobile lockfile are git-ignored, so dependency-tree changes (the `@google/genai` removal, mobile install) are local only.
+
+---
+
+# Decisions Log — kiro/phase2-prep-and-model-rigor (2026-07-05)
+
+Branched from `kiro/phase0-phase1-fusion`. Never committed to `main`.
+
+## Task 1 — Backend persistence layer
+- **Repository pattern.** Routes depend only on the `ResultsRepository` contract (`save`, `list`). `SqliteResultsRepository` (better-sqlite3) is the local backend. A DynamoDB implementation can be dropped in later by satisfying the same contract and swapping one line in `server.js` — no endpoint changes. No AWS SDK was installed.
+- **`userId` on every record**, defaulting to `"local-user"`, so real auth slots in later without a schema change. All list queries are scoped by `userId`.
+- **`node --test` (built-in) chosen for backend tests** instead of adding Jest/supertest, to avoid new dependencies. Integration tests spin up a real Express server on an ephemeral port and use global `fetch`; each test uses a temp SQLite file that is deleted afterward.
+- **Fusion logic ported, not shared.** `backend/node/results/riskFusion.js` mirrors `src/utils/overallRisk.ts` + `src/constants/risk.ts`. Web (Vite/TS), mobile (Expo/TS), and backend (CommonJS) are separate runtimes and can't share one module cleanly, so each keeps a copy. All three must be updated together if the scheme changes (noted in the file headers).
+- **Web `testHistory.ts` fallback behavior (documented in-file):** localStorage stays the synchronous source of truth so the existing synchronous page code is unchanged and the app runs fully offline. Writes are write-through (local first, then best-effort POST). `hydrateFromBackend()` runs once on app start (in `App.tsx`) and refreshes the local cache from the server when reachable; if the backend is down it silently keeps the local cache. This preserved the sync API and avoided a risky async refactor across every page.
+- **SQLite file location:** `backend/node/data/results.db` (overridable via `RESULTS_DB_PATH`). Git-ignored (added to `backend/.gitignore`), documented in `.env.example`.
+- **Rounding note:** contribution percentages use float weights, so e.g. `0.3/0.8 → 37%` (not 38) — a test asserts the actual value. Contributions can differ from a naive expectation by 1 due to float rounding but still sum sensibly.

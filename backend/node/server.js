@@ -25,6 +25,22 @@ const TEMP_DIR = path.join(__dirname, "..", "temp_audio");
 const PYTHON_SCRIPT = path.join(__dirname, "..", "python", "inference.py");
 
 // =====================
+// RESULTS PERSISTENCE (SQLite; repository-backed, cloud-ready)
+// =====================
+const { SqliteResultsRepository } = require("./results/SqliteResultsRepository");
+const { createResultsRouter } = require("./results/resultsRoutes");
+
+const DATA_DIR = path.join(__dirname, "data");
+if (!fs.existsSync(DATA_DIR)) {
+  fs.mkdirSync(DATA_DIR, { recursive: true });
+}
+const RESULTS_DB_PATH = process.env.RESULTS_DB_PATH || path.join(DATA_DIR, "results.db");
+const resultsRepository = new SqliteResultsRepository(RESULTS_DB_PATH);
+
+// Mounted at /api → POST /api/results, GET /api/results, GET /api/overall-risk
+app.use("/api", createResultsRouter(resultsRepository));
+
+// =====================
 // ENSURE TEMP DIR EXISTS
 // =====================
 if (!fs.existsSync(TEMP_DIR)) {

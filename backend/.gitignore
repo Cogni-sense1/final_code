@@ -6,6 +6,12 @@ venv/
 # Node
 node_modules/
 
+# SQLite results store (local persistence; not source)
+node/data/
+*.db
+*.db-shm
+*.db-wal
+
 # Flutter
 build/
 .dart_tool/
