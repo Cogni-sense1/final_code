@@ -1,0 +1,5 @@
+# Training only
+numpy
+pandas
+scikit-learn
+praat-parselmouth

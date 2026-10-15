@@ -1,0 +1,36 @@
+{
+  "name": "neurovoice",
+  "private": true,
+  "version": "2.0.0",
+  "description": "Multimodal Parkinson's screening and monitoring on AWS",
+  "workspaces": [
+    "packages/*",
+    "services/api",
+    "apps/web",
+    "apps/mobile",
+    "infra"
+  ],
+  "scripts": {
+    "dev": "concurrently -n api,web -c cyan,magenta \"npm run dev -w @neurovoice/api\" \"npm run dev -w @neurovoice/web\"",
+    "dev:api": "npm run dev -w @neurovoice/api",
+    "dev:web": "npm run dev -w @neurovoice/web",
+    "seed": "npm run seed -w @neurovoice/api",
+    "job": "npm run job -w @neurovoice/api --",
+    "test": "npm run test --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "synth": "npm run synth -w @neurovoice/infra",
+    "train": "python ml/train_voice.py",
+    "dev:mobile": "npm run start -w @neurovoice/mobile"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0",
+    "typescript": "^5.6.3"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "overrides": {
+    "react": "19.2.3",
+    "react-dom": "19.2.3"
+  }
+}

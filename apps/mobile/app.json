@@ -1,0 +1,43 @@
+{
+  "expo": {
+    "name": "NeuroVoice",
+    "slug": "neurovoice",
+    "version": "2.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "app.neurovoice.mobile"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#1F2A44",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false,
+      "package": "app.neurovoice.mobile"
+    },
+    "web": {
+      "favicon": "./assets/favicon.png",
+      "bundler": "metro"
+    },
+    "scheme": "neurovoice",
+    "experiments": {
+      "typedRoutes": true
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "NeuroVoice records short voice samples for your voice check.",
+          "enableBackgroundPlayback": false
+        }
+      ]
+    ]
+  }
+}

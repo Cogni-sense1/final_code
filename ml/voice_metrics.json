@@ -1,0 +1,21 @@
+{
+  "model_version": "voice-avg-lr-2026-10-11",
+  "dataset": "Sakar et al. 2013, Parkinson Speech Dataset with Multiple Types of Sound Recordings (UCI)",
+  "subjects": 40,
+  "recordings": 200,
+  "recordings_per_subject": 5,
+  "protocol": "leave-one-subject-out; task statistics, scaler and model refit in every fold",
+  "subject_auc": 0.685,
+  "subject_auc_ci95": [
+    0.505,
+    0.844
+  ],
+  "auc_by_recordings_averaged": {
+    "1": 0.638,
+    "2": 0.655,
+    "3": 0.678,
+    "5": 0.685
+  },
+  "permutation_p_value": 0.055,
+  "note": "Lab-recorded audio. Not validated on phone or WhatsApp audio."
+}

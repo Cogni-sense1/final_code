@@ -1,0 +1,22 @@
+{
+  "name": "@neurovoice/infra",
+  "version": "2.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "synth": "cdk synth --quiet",
+    "diff": "cdk diff",
+    "deploy": "cdk deploy --require-approval broadening",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "aws-cdk-lib": "^2.170.0",
+    "constructs": "^10.4.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.1",
+    "aws-cdk": "^2.170.0",
+    "esbuild": "^0.24.0",
+    "tsx": "^4.19.2"
+  }
+}

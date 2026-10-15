@@ -1,0 +1,28 @@
+node_modules/
+dist/
+build/
+cdk.out/
+.expo/
+*.tsbuildinfo
+coverage/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Local runtime data (database file, uploaded audio)
+.local/
+
+# Secrets
+.env
+.env.*
+!.env.example
+
+.DS_Store
+Thumbs.db
+*.log
+
+# Machine-specific editor/preview config
+.claude/

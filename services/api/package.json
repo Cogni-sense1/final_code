@@ -1,0 +1,41 @@
+{
+  "name": "@neurovoice/api",
+  "version": "2.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/local.ts",
+    "start": "tsx src/local.ts",
+    "seed": "tsx src/seed.ts",
+    "job": "tsx src/jobs.ts",
+    "build": "node build.mjs",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@aws-sdk/client-bedrock-runtime": "^3.1149.0",
+    "@aws-sdk/client-dynamodb": "^3.700.0",
+    "@aws-sdk/client-lambda": "^3.700.0",
+    "@aws-sdk/client-polly": "^3.700.0",
+    "@aws-sdk/client-s3": "^3.700.0",
+    "@aws-sdk/client-sesv2": "^3.700.0",
+    "@aws-sdk/client-sns": "^3.700.0",
+    "@aws-sdk/client-transcribe-streaming": "^3.1149.0",
+    "@aws-sdk/lib-dynamodb": "^3.700.0",
+    "@aws-sdk/s3-request-presigner": "^3.700.0",
+    "@hono/node-server": "^1.13.7",
+    "@neurovoice/shared": "*",
+    "aws-jwt-verify": "^4.0.1",
+    "hono": "^4.6.12",
+    "jose": "^5.9.6",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/aws-lambda": "^8.10.146",
+    "@types/node": "^22.10.1",
+    "esbuild": "^0.24.0",
+    "ffmpeg-static": "^5.2.0",
+    "tsx": "^4.19.2",
+    "vitest": "^2.1.4"
+  }
+}
