@@ -26,3 +26,9 @@ Thumbs.db
 
 # Machine-specific editor/preview config
 .claude/
+
+# Video renders
+video/*.mp4
+video/.parts/
+video/font.ttf
+video/*.wav
